@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reinos del Tablero — Parqués 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sand:#efe2c2;
+    --sand-dark:#d8c393;
+    --ink:#2b2116;
+    --gold:#e8b93e;
+    --gold-dark:#a9791f;
+    --panel-bg: rgba(28, 22, 15, 0.78);
+    --panel-border: rgba(232, 185, 62, 0.45);
+    --red:#d64545;
+    --green:#3f9142;
+    --yellow:#e8b93e;
+    --blue:#3f7cd6;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0; width:100%; height:100%; overflow:hidden;
+    background: linear-gradient(180deg,#9fd0e8 0%, #cdeaf5 35%, #e9f4e0 100%);
+    font-family:'Quicksand', sans-serif;
+    color: var(--ink);
+  }
+  #canvas-holder{ position:absolute; inset:0; }
+  canvas{ display:block; width:100%; height:100%; touch-action:none; }
+
+  .title-badge{
+    position:absolute; top:18px; left:50%; transform:translateX(-50%);
+    font-family:'Cinzel', serif; font-weight:700; letter-spacing:1px;
+    font-size:22px; color:#fff8e6;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.45), 0 0 2px rgba(0,0,0,0.6);
+    pointer-events:none; z-index:5; text-align:center;
+  }
+  .title-badge span{ display:block; font-family:'Quicksand',sans-serif; font-weight:600; font-size:12px; letter-spacing:3px; opacity:.85; margin-top:2px; text-transform:uppercase;}
+
+  #hud{
+    position:absolute; top:18px; left:18px; z-index:10;
+    width:250px;
+    background: var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-radius:16px;
+    padding:16px 16px 14px;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    color:#f7efd9;
+  }
+  #hud h3{
+    margin:0 0 10px; font-family:'Cinzel',serif; font-size:14px; letter-spacing:1px;
+    color: var(--gold); text-transform:uppercase; border-bottom:1px solid var(--panel-border); padding-bottom:8px;
+  }
+  .turn-row{ display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .turn-dot{ width:20px; height:20px; border-radius:50%; box-shadow: inset 0 -3px 5px rgba(0,0,0,0.35), 0 0 8px rgba(255,255,255,0.25); flex-shrink:0; }
+  .turn-text{ font-weight:600; font-size:15px; }
+  .turn-text small{ display:block; font-weight:400; font-size:11px; opacity:.75; }
+
+  #diceValueBox{
+    display:flex; align-items:center; justify-content:center; gap:10px; margin: 8px 0 12px;
+  }
+  #diceValueBox .num{
+    font-family:'Cinzel',serif; font-size:30px; font-weight:900; color:#fff;
+    width:46px; height:46px; border-radius:12px;
+    background: linear-gradient(155deg, #3a2c1a, #1c150c);
+    border:1px solid var(--panel-border);
+    display:flex; align-items:center; justify-content:center;
+  }
+  #rollBtn{
+    width:100%;
+    font-family:'Cinzel', serif; font-weight:700; letter-spacing:0.5px;
+    font-size:14px; padding:10px 0; border-radius:10px; border:none;
+    cursor:pointer; color:#3a2a0c;
+    background: linear-gradient(180deg, #ffe38a, var(--gold) 55%, var(--gold-dark));
+    box-shadow: 0 5px 0 #7a561a, 0 8px 14px rgba(0,0,0,0.35);
+    transition: transform .08s ease;
+  }
+  #rollBtn:active{ transform: translateY(3px); box-shadow: 0 2px 0 #7a561a, 0 4px 8px rgba(0,0,0,0.35); }
+  #rollBtn:disabled{ filter:grayscale(0.6) brightness(0.7); cursor:not-allowed; box-shadow:none; transform:none; }
+
+  #logBox{
+    margin-top:12px; font-size:12px; line-height:1.5; min-height:34px;
+    color:#e9dcbb; opacity:.92; border-top:1px solid var(--panel-border); padding-top:8px;
+  }
+
+  #progressRow{ display:flex; gap:8px; margin-top:10px; justify-content:space-between; }
+  .prog-chip{ flex:1; text-align:center; padding:6px 2px; border-radius:8px; background:rgba(255,255,255,0.06); }
+  .prog-chip .dot{ width:10px;height:10px;border-radius:50%; margin:0 auto 4px; }
+  .prog-chip .cnt{ font-size:13px; font-weight:700; }
+
+  #startOverlay, #winOverlay{
+    position:absolute; inset:0; z-index:50;
+    background: radial-gradient(ellipse at center, rgba(20,30,15,0.55), rgba(5,8,4,0.88));
+    display:flex; align-items:center; justify-content:center;
+  }
+  .modal{
+    background: linear-gradient(165deg, #241a10, #14100a);
+    border:1px solid var(--panel-border);
+    border-radius:20px; padding:34px 38px; max-width:420px; width:88%;
+    text-align:center; color:#f7efd9;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .modal h1{
+    font-family:'Cinzel',serif; font-size:26px; margin:0 0 6px; color:var(--gold);
+    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  }
+  .modal p{ font-size:13px; opacity:.85; margin:0 0 22px; line-height:1.6;}
+  .count-row{ display:flex; gap:10px; justify-content:center; margin-bottom:24px; }
+  .count-btn{
+    width:52px; height:52px; border-radius:50%; border:2px solid var(--panel-border);
+    background: rgba(255,255,255,0.05); color:#f7efd9; font-family:'Cinzel',serif; font-weight:700;
+    font-size:18px; cursor:pointer; transition: all .15s;
+  }
+  .count-btn.active, .count-btn:hover{ background: var(--gold); color:#3a2a0c; border-color:var(--gold); }
+  .big-btn{
+    font-family:'Cinzel', serif; font-weight:700; letter-spacing:0.6px;
+    font-size:15px; padding:13px 30px; border-radius:12px; border:none;
+    cursor:pointer; color:#3a2a0c;
+    background: linear-gradient(180deg, #ffe38a, var(--gold) 55%, var(--gold-dark));
+    box-shadow: 0 5px 0 #7a561a, 0 10px 18px rgba(0,0,0,0.4);
+  }
+  .winner-dot{ width:26px;height:26px;border-radius:50%; display:inline-block; margin-bottom:14px; box-shadow:0 0 24px currentColor;}
+
+  #hint{
+    position:absolute; bottom:16px; left:50%; transform:translateX(-50%); z-index:10;
+    font-size:12px; color:#3a2a10; background: rgba(255,244,214,0.88);
+    padding:7px 16px; border-radius:20px; box-shadow:0 6px 16px rgba(0,0,0,0.25);
+    font-weight:600; pointer-events:none; transition: opacity .3s; text-align:center;
+  }
+
+  #players-select { display:none; }
+</style>
+</head>
+<body>
+
+<div id="canvas-holder"></div>
+
+<div class="title-badge">Reinos del Tablero<span>parqués en el gran jardín real</span></div>
+
+<div id="hud">
+  <h3>Turno actual</h3>
+  <div class="turn-row">
+    <div class="turn-dot" id="turnDot"></div>
+    <div class="turn-text" id="turnText">—<small id="turnSub">Preparando partida…</small></div>
+  </div>
+  <div id="diceValueBox">
+    <div class="num" id="diceNum">?</div>
+    <button id="rollBtn">🎲 Tirar el dado</button>
+  </div>
+  <div id="progressRow"></div>
+  <div id="logBox">Bienvenido al jardín real. Elige jugadores para comenzar.</div>
+</div>
+
+<div id="hint" style="opacity:0;">Toca una ficha brillante para moverla</div>
+
+<div id="startOverlay">
+  <div class="modal">
+    <h1>Reinos del Tablero</h1>
+    <p>Un parqués 3D en un jardín real gigante. Elige cuántos reinos (jugadores) participan hoy.</p>
+    <div class="count-row" id="countRow">
+      <button class="count-btn" data-n="2">2</button>
+      <button class="count-btn active" data-n="4">4</button>
+      <button class="count-btn" data-n="3">3</button>
+    </div>
+    <button class="big-btn" id="startBtn">Comenzar partida</button>
+  </div>
+</div>
+
+<div id="winOverlay" style="display:none;">
+  <div class="modal">
+    <div class="winner-dot" id="winDot"></div>
+    <h1 id="winTitle">¡Victoria!</h1>
+    <p id="winSub">Un reino ha llevado sus cuatro fichas a casa.</p>
+    <button class="big-btn" onclick="location.reload()">Jugar de nuevo</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============================================================
+   CONFIGURACIÓN GENERAL Y DATOS DEL TABLERO (estilo parqués)
+   ============================================================ */
+
+const CELL = 2.2; // tamaño de cada celda del tablero (15x15)
+
+function cellToWorld(row, col){
+  return { x: (col - 7) * CELL, z: (row - 7) * CELL };
+}
+
+// Camino compartido de 52 casillas (fila,col) 0-indexado sobre grid 15x15
+const trackPath = [
+  [6,1],[6,2],[6,3],[6,4],[6,5],
+  [5,6],[4,6],[3,6],[2,6],[1,6],[0,6],
+  [0,7],
+  [0,8],[1,8],[2,8],[3,8],[4,8],[5,8],
+  [6,9],[6,10],[6,11],[6,12],[6,13],[6,14],
+  [7,14],
+  [8,14],[8,13],[8,12],[8,11],[8,10],[8,9],
+  [9,8],[10,8],[11,8],[12,8],[13,8],[14,8],
+  [14,7],
+  [14,6],[13,6],[12,6],[11,6],[10,6],[9,6],
+  [8,5],[8,4],[8,3],[8,2],[8,1],[8,0],
+  [7,0],
+  [6,0]
+];
+const SAFE_INDICES = new Set([0,8,13,21,26,34,39,47]);
+
+const COLORS = {
+  red:    { hex:0xd64545, dark:0x8f2626, name:'Rojo',     startIndex:0,
+            homeCol:[[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]], baseOrigin:[0,0], finishVec:[-1,0] },
+  green:  { hex:0x3f9142, dark:0x235a26, name:'Verde',     startIndex:13,
+            homeCol:[[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]], baseOrigin:[0,9], finishVec:[0,-1] },
+  yellow: { hex:0xe8b93e, dark:0xa9791f, name:'Amarillo', startIndex:26,
+            homeCol:[[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]], baseOrigin:[9,9], finishVec:[1,0] },
+  blue:   { hex:0x3f7cd6, dark:0x244f8c, name:'Azul',      startIndex:39,
+            homeCol:[[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]], baseOrigin:[9,0], finishVec:[0,1] },
+};
+const ALL_COLOR_ORDER = ['red','green','yellow','blue'];
+
+const BASE_SLOT_REL = [[1.5,1.5],[1.5,3.5],[3.5,1.5],[3.5,3.5]];
+
+/* ============================================================
+   ESCENA THREE.JS
+   ============================================================ */
+
+const holder = document.getElementById('canvas-holder');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbfe0ee);
+scene.fog = new THREE.Fog(0xbfe0ee, 60, 145);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 400);
+camera.position.set(0, 46, 46);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+holder.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0,0,0);
+controls.maxPolarAngle = Math.PI/2 - 0.05;
+controls.minDistance = 16;
+controls.maxDistance = 90;
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.update();
+
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Luces
+const hemi = new THREE.HemisphereLight(0xffffff, 0x557733, 0.85);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff2d0, 1.15);
+sun.position.set(30, 55, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left = -45; sun.shadow.camera.right = 45;
+sun.shadow.camera.top = 45; sun.shadow.camera.bottom = -45;
+sun.shadow.camera.far = 130;
+sun.shadow.bias = -0.0015;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xdbeaff, 0.3);
+fill.position.set(-25,20,-25);
+scene.add(fill);
+
+/* ============================================================
+   TERRENO / PARQUE
+   ============================================================ */
+
+const groundGeo = new THREE.CircleGeometry(95, 64);
+const groundMat = new THREE.MeshStandardMaterial({ color:0x5f9a4a, roughness:1 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// camino circular decorativo alrededor del tablero
+const ringGeo = new THREE.RingGeometry(20.5, 22.5, 64);
+const ringMat = new THREE.MeshStandardMaterial({ color:0xd8c393, roughness:1 });
+const ring = new THREE.Mesh(ringGeo, ringMat);
+ring.rotation.x = -Math.PI/2;
+ring.position.y = 0.02;
+ring.receiveShadow = true;
+scene.add(ring);
+
+function rand(a,b){ return a + Math.random()*(b-a); }
+
+function makeTree(x,z, scale=1){
+  const g = new THREE.Group();
+  const trunkMat = new THREE.MeshStandardMaterial({ color:0x6b4a2f, roughness:1 });
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16*scale,0.22*scale,1.6*scale,8), trunkMat);
+  trunk.position.y = 0.8*scale;
+  trunk.castShadow = true;
+  g.add(trunk);
+  const leafMat = new THREE.MeshStandardMaterial({ color: Math.random()>0.5?0x3f7d3a:0x4f9146, roughness:0.9 });
+  for(let i=0;i<3;i++){
+    const s = (1.1 - i*0.22)*scale;
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(1.05*s,1.5*s,8), leafMat);
+    cone.position.y = 1.5*scale + i*0.85*scale;
+    cone.castShadow = true;
+    g.add(cone);
+  }
+  g.position.set(x,0,z);
+  return g;
+}
+
+function makeBush(x,z){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color:0x4a8a3f, roughness:1 });
+  for(let i=0;i<3;i++){
+    const sp = new THREE.Mesh(new THREE.SphereGeometry(rand(0.35,0.55),10,8), mat);
+    sp.position.set(rand(-0.3,0.3), rand(0.25,0.4), rand(-0.3,0.3));
+    sp.castShadow = true;
+    g.add(sp);
+  }
+  g.position.set(x,0,z);
+  return g;
+}
+
+function makeFlowerBed(x,z,colorHex){
+  const g = new THREE.Group();
+  const bed = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,0.12,10), new THREE.MeshStandardMaterial({color:0x3c6b2f}));
+  bed.position.y = 0.06;
+  g.add(bed);
+  const petalMat = new THREE.MeshStandardMaterial({ color:colorHex, roughness:0.6 });
+  for(let i=0;i<5;i++){
+    const ang = (i/5)*Math.PI*2;
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.1,6,6), petalMat);
+    p.position.set(Math.cos(ang)*0.28, 0.16, Math.sin(ang)*0.28);
+    g.add(p);
+  }
+  g.position.set(x,0,z);
+  return g;
+}
+
+// bosque decorativo alrededor del parque
+for(let i=0;i<48;i++){
+  const ang = Math.random()*Math.PI*2;
+  const r = rand(26, 62);
+  const x = Math.cos(ang)*r, z = Math.sin(ang)*r;
+  scene.add(makeTree(x,z, rand(0.8,1.6)));
+}
+for(let i=0;i<26;i++){
+  const ang = Math.random()*Math.PI*2;
+  const r = rand(23, 60);
+  scene.add(makeBush(Math.cos(ang)*r, Math.sin(ang)*r));
+}
+
+/* ============================================================
+   TABLERO
+   ============================================================ */
+
+const boardGroup = new THREE.Group();
+scene.add(boardGroup);
+
+// plataforma base bajo todo el tablero
+const baseSlabGeo = new THREE.BoxGeometry(15*CELL+1.6, 0.5, 15*CELL+1.6);
+const baseSlabMat = new THREE.MeshStandardMaterial({ color:0xcbb27a, roughness:0.9 });
+const baseSlab = new THREE.Mesh(baseSlabGeo, baseSlabMat);
+baseSlab.position.y = -0.3;
+baseSlab.receiveShadow = true;
+boardGroup.add(baseSlab);
+
+function addTile(row,col,size,colorHex,height=0.22,yOffset=0){
+  const {x,z} = cellToWorld(row,col);
+  const geo = new THREE.BoxGeometry(size*CELL*0.94, height, size*CELL*0.94);
+  const mat = new THREE.MeshStandardMaterial({ color:colorHex, roughness:0.85 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, height/2 + yOffset, z);
+  mesh.receiveShadow = true;
+  mesh.castShadow = false;
+  boardGroup.add(mesh);
+  return mesh;
+}
+
+function addStarMarker(row,col,colorHex){
+  const {x,z} = cellToWorld(row,col);
+  const starMat = new THREE.MeshStandardMaterial({ color:colorHex, emissive:colorHex, emissiveIntensity:0.25, metalness:0.3, roughness:0.4 });
+  const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.28,0), starMat);
+  star.position.set(x, 0.38, z);
+  boardGroup.add(star);
+}
+
+// Track: pintar las 52 casillas
+trackPath.forEach((rc, idx)=>{
+  let color = 0xf1e6c8;
+  // colorea la salida de cada jugador
+  for(const key of ALL_COLOR_ORDER){
+    if(COLORS[key].startIndex === idx){ color = COLORS[key].hex; }
+  }
+  addTile(rc[0], rc[1], 1, color, 0.22);
+  if(SAFE_INDICES.has(idx)){
+    addStarMarker(rc[0], rc[1], 0xfff6d8);
+  }
+});
+
+// Columnas de llegada (home column) por color
+for(const key of ALL_COLOR_ORDER){
+  COLORS[key].homeCol.forEach(rc=>{
+    addTile(rc[0], rc[1], 1, COLORS[key].hex, 0.24);
+  });
+}
+
+// Celda central (7,7)
+addTile(7,7,1,0xffffff,0.22);
+
+// Rellenar celdas restantes de la cruz con piedra neutra
+(function fillCross(){
+  const used = new Set();
+  trackPath.forEach(rc=>used.add(rc[0]+','+rc[1]));
+  for(const key of ALL_COLOR_ORDER) COLORS[key].homeCol.forEach(rc=>used.add(rc[0]+','+rc[1]));
+  used.add('7,7');
+  for(let r=0;r<15;r++){
+    for(let c=0;c<15;c++){
+      const inVArm = (c>=6 && c<=8);
+      const inHArm = (r>=6 && r<=8);
+      if(!(inVArm||inHArm)) continue;
+      const k = r+','+c;
+      if(used.has(k)) continue;
+      addTile(r,c,1,0xe9dcb8,0.2);
+    }
+  }
+})();
+
+// Zonas base (6x6) por color, con césped, valla y flores
+function buildBaseZone(colorKey){
+  const cfg = COLORS[colorKey];
+  const [r0,c0] = cfg.baseOrigin;
+  const centerRow = r0+2.5, centerCol = c0+2.5;
+  const {x,z} = cellToWorld(centerRow, centerCol);
+
+  const zoneGroup = new THREE.Group();
+  zoneGroup.position.set(x,0,z);
+  boardGroup.add(zoneGroup);
+
+  const grassMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(cfg.hex).lerp(new THREE.Color(0xffffff),0.72), roughness:1 });
+  const grass = new THREE.Mesh(new THREE.BoxGeometry(6*CELL-0.3,0.3,6*CELL-0.3), grassMat);
+  grass.position.y = 0.05;
+  grass.receiveShadow = true;
+  zoneGroup.add(grass);
+
+  const borderMat = new THREE.MeshStandardMaterial({ color: cfg.hex, roughness:0.6 });
+  const border = new THREE.Mesh(new THREE.BoxGeometry(6*CELL,0.5,6*CELL), borderMat);
+  border.position.y = -0.15;
+  zoneGroup.add(border);
+
+  // vallitas decorativas en el perímetro
+  const postMat = new THREE.MeshStandardMaterial({ color:0xf5f0e0, roughness:0.5 });
+  const half = 6*CELL/2 - 0.5;
+  const postCount = 10;
+  for(let i=0;i<postCount;i++){
+    const t = i/(postCount-1);
+    const off = -half + t*2*half;
+    [[off,-half],[off,half],[-half,off],[half,off]].forEach(([px,pz])=>{
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.55,6), postMat);
+      post.position.set(px,0.35,pz);
+      zoneGroup.add(post);
+    });
+  }
+
+  // flores en las esquinas
+  const {x:fx1,z:fz1} = cellToWorld(0.7,0.7);
+  [[0.7,0.7],[0.7,4.3],[4.3,0.7],[4.3,4.3]].forEach(([rr,ccl])=>{
+    const p = cellToWorld(rr,ccl);
+    const relX = p.x - x, relZ = p.z - z;
+    zoneGroup.add(makeFlowerBed(relX,relZ, colorKey==='yellow'?0xffffff:0xffe38a));
+  });
+
+  // pedestales para las 4 fichas
+  const pedestals = [];
+  BASE_SLOT_REL.forEach(rel=>{
+    const p = cellToWorld(r0+rel[0], c0+rel[1]);
+    const relX = p.x - x, relZ = p.z - z;
+    const pedMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness:0.5 });
+    const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.6,0.22,20), pedMat);
+    ped.position.set(relX,0.11,relZ);
+    ped.receiveShadow = true;
+    zoneGroup.add(ped);
+    pedestals.push({ x:p.x, z:p.z });
+  });
+
+  return { pedestals };
+}
+
+const baseZones = {};
+for(const key of ALL_COLOR_ORDER) baseZones[key] = buildBaseZone(key);
+
+/* ============================================================
+   FUENTE CENTRAL (elemento distintivo)
+   ============================================================ */
+
+function buildFountain(){
+  const g = new THREE.Group();
+  const stoneMat = new THREE.MeshStandardMaterial({ color:0xe4d9bd, roughness:0.6 });
+  const waterMat = new THREE.MeshStandardMaterial({ color:0x5cb8dd, roughness:0.15, metalness:0.15, transparent:true, opacity:0.88 });
+
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(2.55,2.7,0.5,24), stoneMat);
+  base.position.y = 0.5;
+  base.castShadow = true; base.receiveShadow = true;
+  g.add(base);
+
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(2.3,2.3,0.28,24), waterMat);
+  water.position.y = 0.86;
+  g.add(water);
+
+  const mid = new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.55,1.2,16), stoneMat);
+  mid.position.y = 1.5;
+  mid.castShadow = true;
+  g.add(mid);
+
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(1.05,0.85,0.32,20), stoneMat);
+  bowl.position.y = 2.15;
+  bowl.castShadow = true;
+  g.add(bowl);
+
+  const water2 = new THREE.Mesh(new THREE.CylinderGeometry(0.9,0.9,0.14,20), waterMat);
+  water2.position.y = 2.28;
+  g.add(water2);
+
+  const spike = new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.18,0.9,10), stoneMat);
+  spike.position.y = 2.75;
+  g.add(spike);
+
+  const crownMat = new THREE.MeshStandardMaterial({ color:0xe8b93e, metalness:0.5, roughness:0.35, emissive:0x543f0e, emissiveIntensity:0.2 });
+  const crown = new THREE.Mesh(new THREE.OctahedronGeometry(0.32,0), crownMat);
+  crown.position.y = 3.35;
+  g.add(crown);
+
+  // gotas orbitando (agua decorativa animada)
+  const droplets = [];
+  const dropMat = new THREE.MeshStandardMaterial({ color:0xbfe9fb, transparent:true, opacity:0.85 });
+  for(let i=0;i<10;i++){
+    const d = new THREE.Mesh(new THREE.SphereGeometry(0.05,6,6), dropMat);
+    droplets.push({mesh:d, ang: (i/10)*Math.PI*2, r: rand(0.5,1.0), speed: rand(0.6,1.1), yOff: rand(0,1)});
+    g.add(d);
+  }
+  g.userData.droplets = droplets;
+
+  return g;
+}
+const fountain = buildFountain();
+const centerPos = cellToWorld(7,7);
+fountain.position.set(centerPos.x, 0.1, centerPos.z);
+boardGroup.add(fountain);
+
+// pequeños faroles decorativos en las esquinas del jardín interior
+function makeLamp(x,z){
+  const g = new THREE.Group();
+  const poleMat = new THREE.MeshStandardMaterial({color:0x2c2c2c, roughness:0.5, metalness:0.4});
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.08,1.6,8), poleMat);
+  pole.position.y = 0.8;
+  g.add(pole);
+  const lampMat = new THREE.MeshStandardMaterial({color:0xfff2c0, emissive:0xffe38a, emissiveIntensity:0.6});
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16,10,10), lampMat);
+  lamp.position.y = 1.65;
+  g.add(lamp);
+  g.position.set(x,0,z);
+  return g;
+}
+[[ -18,-18],[18,-18],[-18,18],[18,18]].forEach(([x,z])=> scene.add(makeLamp(x,z)) );
+
+/* ============================================================
+   DADO 3D
+   ============================================================ */
+
+function makeDiceFaceTexture(n){
+  const size = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fbf6e8';
+  roundRect(ctx,4,4,size-8,size-8,18);
+  ctx.fill();
+  ctx.strokeStyle = '#c9b57a';
+  ctx.lineWidth = 3;
+  roundRect(ctx,4,4,size-8,size-8,18);
+  ctx.stroke();
+  ctx.fillStyle = '#2b2116';
+  const positions = {
+    1: [[0.5,0.5]],
+    2: [[0.28,0.28],[0.72,0.72]],
+    3: [[0.28,0.28],[0.5,0.5],[0.72,0.72]],
+    4: [[0.28,0.28],[0.72,0.28],[0.28,0.72],[0.72,0.72]],
+    5: [[0.28,0.28],[0.72,0.28],[0.5,0.5],[0.28,0.72],[0.72,0.72]],
+    6: [[0.28,0.24],[0.72,0.24],[0.28,0.5],[0.72,0.5],[0.28,0.76],[0.72,0.76]],
+  };
+  positions[n].forEach(([px,py])=>{
+    ctx.beginPath();
+    ctx.arc(px*size, py*size, size*0.085, 0, Math.PI*2);
+    ctx.fill();
+  });
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+// orden materiales BoxGeometry: [+x,-x,+y,-y,+z,-z] -> valores [1,6,2,5,3,4]
+const diceFaceOrder = [1,6,2,5,3,4];
+const diceMaterials = diceFaceOrder.map(n=> new THREE.MeshStandardMaterial({ map: makeDiceFaceTexture(n), roughness:0.35 }) );
+const diceGeo = new THREE.BoxGeometry(1.15,1.15,1.15,1,1,1);
+// bordes redondeados simulados con bevel simple no disponible -> usamos bevel mediante escalado leve en vertices no crítico
+const dice = new THREE.Mesh(diceGeo, diceMaterials);
+dice.castShadow = true;
+const dicePedestal = new THREE.Mesh(new THREE.CylinderGeometry(1,1.1,0.3,20), new THREE.MeshStandardMaterial({color:0xf1e6c8, roughness:0.7}));
+const diceAnchor = new THREE.Group();
+const dicePos = cellToWorld(7.0, 7.0);
+diceAnchor.position.set(dicePos.x + 3.2, 0, dicePos.z + 3.2);
+dicePedestal.position.y = 0.15;
+dice.position.y = 1.0;
+diceAnchor.add(dicePedestal, dice);
+boardGroup.add(diceAnchor);
+
+// mapeo valor -> rotacion final (cara arriba)
+const diceTargetEuler = {
+  1: new THREE.Euler(0,0, Math.PI/2),
+  2: new THREE.Euler(0,0,0),
+  3: new THREE.Euler(-Math.PI/2,0,0),
+  4: new THREE.Euler(Math.PI/2,0,0),
+  5: new THREE.Euler(Math.PI,0,0),
+  6: new THREE.Euler(0,0,-Math.PI/2),
+};
+
+let diceAnimating = false;
+function rollDiceAnimation(finalValue, onDone){
+  diceAnimating = true;
+  const duration1 = 650; // giro libre
+  const duration2 = 420; // asentado
+  const t0 = performance.now();
+  const spinAxis = new THREE.Vector3(rand(-1,1), rand(0.5,1), rand(-1,1)).normalize();
+  const startQuat = dice.quaternion.clone();
+  const targetQuat = new THREE.Quaternion().setFromEuler(diceTargetEuler[finalValue]);
+
+  function spinPhase(now){
+    const t = now - t0;
+    if(t < duration1){
+      const angle = (t/16) * 0.5;
+      dice.rotateOnWorldAxis(spinAxis, 0.35);
+      dice.position.y = 1.0 + Math.abs(Math.sin(t*0.02))*0.6;
+      requestAnimationFrame(spinPhase);
+    } else {
+      const t2s = now;
+      settlePhase(t2s);
+    }
+  }
+  function settlePhase(t2start){
+    const midQuat = dice.quaternion.clone();
+    function step(now){
+      const t = (now - t2start)/duration2;
+      const tt = Math.min(t,1);
+      const ease = 1-Math.pow(1-tt,3);
+      const q = midQuat.clone().slerp(targetQuat, ease);
+      dice.quaternion.copy(q);
+      dice.position.y = 1.0 + Math.abs(Math.sin((1-tt)*Math.PI))*0.35;
+      if(tt < 1){
+        requestAnimationFrame(step);
+      } else {
+        dice.position.y = 1.0;
+        diceAnimating = false;
+        onDone && onDone();
+      }
+    }
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(spinPhase);
+}
+
+/* ============================================================
+   FICHAS
+   ============================================================ */
+
+function makeTokenMesh(colorKey){
+  const cfg = COLORS[colorKey];
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: cfg.hex, roughness:0.45, metalness:0.12 });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.36,0.18,16), bodyMat);
+  base.position.y = 0.09;
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.24,0.42,14), bodyMat);
+  stem.position.y = 0.18 + 0.21;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22,16,14), bodyMat);
+  head.position.y = 0.18+0.42+0.14;
+  [base,stem,head].forEach(m=>{ m.castShadow = true; m.receiveShadow = true; g.add(m); });
+
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42,0.05,8,24), new THREE.MeshStandardMaterial({color:0xffe38a, emissive:0xffcf4d, emissiveIntensity:0.7, transparent:true, opacity:0}));
+  ring.rotation.x = Math.PI/2;
+  ring.position.y = 0.03;
+  g.add(ring);
+  g.userData.glowRing = ring;
+  g.userData.baseY = 0;
+  return g;
+}
+
+/* ============================================================
+   ESTADO DEL JUEGO
+   ============================================================ */
+
+let activeColors = [];
+let players = {};
+let turnOrder = [];
+let currentIdx = 0;
+let diceValue = null;
+let canRoll = true;
+let awaitingSelection = false;
+let movableTokens = [];
+let consecutiveSixes = 0;
+let gameOver = false;
+
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+const clickableTokenMeshes = [];
+
+function getFinishSlotPos(colorKey, indexAmongHome){
+  const cfg = COLORS[colorKey];
+  const c = cellToWorld(7,7);
+  const vx = cfg.finishVec[0], vz = cfg.finishVec[1];
+  const perpX = -vz, perpZ = vx;
+  const spread = [-0.28, 0.28, -0.09, 0.09];
+  const off = spread[indexAmongHome % spread.length];
+  return {
+    x: c.x + vx*0.65 + perpX*off,
+    z: c.z + vz*0.65 + perpZ*off
+  };
+}
+
+function tokenWorldPos(token, colorKey){
+  const cfg = COLORS[colorKey];
+  if(token.status === 'base'){
+    const p = baseZones[colorKey].pedestals[token.slotIndex];
+    return { x:p.x, z:p.z, y:0.24 };
+  }
+  if(token.status === 'home'){
+    const homeIdx = players[colorKey].tokens.filter(t=>t.status==='home').indexOf(token);
+    const p = getFinishSlotPos(colorKey, homeIdx>=0?homeIdx:0);
+    return { x:p.x, z:p.z, y:0.24 };
+  }
+  // activo
+  if(token.localStep <= 50){
+    const gIdx = (cfg.startIndex + token.localStep) % 52;
+    const rc = trackPath[gIdx];
+    const p = cellToWorld(rc[0], rc[1]);
+    return { x:p.x, z:p.z, y:0.24 };
+  } else {
+    const hc = cfg.homeCol[token.localStep-51];
+    const p = cellToWorld(hc[0], hc[1]);
+    return { x:p.x, z:p.z, y:0.24 };
+  }
+}
+
+function stackOffsetsFor(sameSpotTokens, myIndex){
+  // separa visualmente fichas que comparten casilla
+  const n = sameSpotTokens.length;
+  if(n<=1) return {x:0,z:0};
+  const layout = [[-0.28,-0.28],[0.28,-0.28],[-0.28,0.28],[0.28,0.28]];
+  return { x: layout[myIndex%4][0], z: layout[myIndex%4][1] };
+}
+
+function initGame(colorsList){
+  activeColors = colorsList;
+  turnOrder = [...colorsList];
+  players = {};
+  for(const key of colorsList){
+    const tokens = [];
+    for(let i=0;i<4;i++){
+      const mesh = makeTokenMesh(key);
+      boardGroup.add(mesh);
+      clickableTokenMeshes.push(mesh);
+      const token = { status:'base', localStep:-1, slotIndex:i, mesh, colorKey:key, tokenIndex:i };
+      mesh.userData.token = token;
+      tokens.push(token);
+    }
+    players[key] = { tokens, homeCount:0 };
+  }
+  currentIdx = 0;
+  diceValue = null;
+  canRoll = true;
+  awaitingSelection = false;
+  movableTokens = [];
+  consecutiveSixes = 0;
+  gameOver = false;
+  layoutAllTokens();
+  buildProgressRow();
+  updateHUD();
+  log(`Comienza la partida con ${colorsList.length} reinos. ¡Buena suerte!`);
+}
+
+function layoutAllTokens(){
+  // agrupar por posicion para stacking
+  const spotMap = new Map();
+  for(const key of activeColors){
+    for(const t of players[key].tokens){
+      const pos = tokenWorldPos(t,key);
+      const k = pos.x.toFixed(2)+'_'+pos.z.toFixed(2);
+      if(!spotMap.has(k)) spotMap.set(k,[]);
+      spotMap.get(k).push(t);
+    }
+  }
+  for(const key of activeColors){
+    for(const t of players[key].tokens){
+      const pos = tokenWorldPos(t,key);
+      const k = pos.x.toFixed(2)+'_'+pos.z.toFixed(2);
+      const group = spotMap.get(k);
+      const idx = group.indexOf(t);
+      const off = (t.status==='base') ? {x:0,z:0} : stackOffsetsFor(group, idx);
+      t.mesh.position.set(pos.x+off.x, pos.y, pos.z+off.z);
+    }
+  }
+}
+
+/* ============================================================
+   LOGICA DE TURNOS
+   ============================================================ */
+
+function currentColor(){ return turnOrder[currentIdx]; }
+
+function computeMovable(colorKey, value){
+  const list = [];
+  for(const t of players[colorKey].tokens){
+    if(t.status==='base' && value===6) list.push(t);
+    else if(t.status==='active' && (t.localStep+value)<=57) list.push(t);
+  }
+  return list;
+}
+
+function setGlow(tokens, on){
+  for(const t of tokens){
+    const ring = t.mesh.userData.glowRing;
+    ring.material.opacity = on ? 0.9 : 0;
+  }
+}
+
+function clearAllGlow(){
+  for(const key of activeColors) for(const t of players[key].tokens) t.mesh.userData.glowRing.material.opacity = 0;
+}
+
+document.getElementById('rollBtn').addEventListener('click', doRoll);
+dice.callback = null;
+renderer.domElement.addEventListener('click', onCanvasClick);
+
+function doRoll(){
+  if(!canRoll || diceAnimating || gameOver) return;
+  canRoll = false;
+  document.getElementById('rollBtn').disabled = true;
+  const value = 1 + Math.floor(Math.random()*6);
+  rollDiceAnimation(value, ()=>{
+    diceValue = value;
+    document.getElementById('diceNum').textContent = value;
+    resolveRoll(value);
+  });
+}
+
+function resolveRoll(value){
+  const key = currentColor();
+  const movable = computeMovable(key, value);
+  if(value===6){ consecutiveSixes++; } else { consecutiveSixes = 0; }
+
+  if(consecutiveSixes>=3){
+    log(`${COLORS[key].name} sacó tres 6 seguidos — turno anulado.`);
+    consecutiveSixes = 0;
+    setTimeout(nextTurn, 700);
+    return;
+  }
+
+  if(movable.length===0){
+    log(`${COLORS[key].name} sacó ${value} pero no tiene movimientos posibles.`);
+    setTimeout(()=>{
+      if(value===6){ canRoll=true; document.getElementById('rollBtn').disabled=false; updateHUD(); }
+      else nextTurn();
+    }, 700);
+    return;
+  }
+
+  movableTokens = movable;
+  awaitingSelection = true;
+  setGlow(movable, true);
+  showHint(true);
+  log(`${COLORS[key].name} sacó ${value}. Elige una ficha brillante para mover.`);
+  updateHUD();
+}
+
+function onCanvasClick(ev){
+  if(!awaitingSelection || diceAnimating || gameOver) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((ev.clientX-rect.left)/rect.width)*2-1;
+  pointer.y = -((ev.clientY-rect.top)/rect.height)*2+1;
+  raycaster.setFromCamera(pointer, camera);
+  const meshList = [];
+  clickableTokenMeshes.forEach(g=> g.children.forEach(c=>{ c.userData.rootToken = g.userData.token; meshList.push(c); }) );
+  const hits = raycaster.intersectObjects(meshList, false);
+  if(hits.length===0) return;
+  const token = hits[0].object.userData.rootToken;
+  if(!token) return;
+  if(!movableTokens.includes(token)) return;
+  awaitingSelection = false;
+  showHint(false);
+  clearAllGlow();
+  moveTokenAnimated(token, diceValue);
+}
+
+function moveTokenAnimated(token, steps){
+  const key = token.colorKey;
+  let stepsLeft = steps;
+
+  function doStep(){
+    if(stepsLeft<=0){ finishMove(token); return; }
+    if(token.status==='base'){
+      token.status='active'; token.localStep=0;
+    } else {
+      token.localStep += 1;
+      if(token.localStep===57){ token.status='home'; players[key].homeCount++; }
+    }
+    layoutAllTokens();
+    bounceToken(token, ()=>{
+      stepsLeft--;
+      if(token.status==='home'){ finishMove(token); }
+      else setTimeout(doStep, 90);
+    });
+  }
+  doStep();
+}
+
+function bounceToken(token, onDone){
+  const dur = 160;
+  const t0 = performance.now();
+  const mesh = token.mesh;
+  const baseY = mesh.position.y;
+  function anim(now){
+    const t = Math.min((now-t0)/dur,1);
+    const h = Math.sin(t*Math.PI)*0.55;
+    mesh.position.y = baseY + h;
+    if(t<1) requestAnimationFrame(anim);
+    else { mesh.position.y = baseY; onDone&&onDone(); }
+  }
+  requestAnimationFrame(anim);
+}
+
+function finishMove(token){
+  const key = token.colorKey;
+  // captura
+  if(token.status==='active' && token.localStep<=50){
+    const gIdx = (COLORS[key].startIndex + token.localStep) % 52;
+    if(!SAFE_INDICES.has(gIdx)){
+      for(const otherKey of activeColors){
+        if(otherKey===key) continue;
+        for(const ot of players[otherKey].tokens){
+          if(ot.status==='active' && ot.localStep<=50){
+            const oIdx = (COLORS[otherKey].startIndex + ot.localStep) % 52;
+            if(oIdx===gIdx){
+              ot.status='base'; ot.localStep=-1;
+              log(`¡${COLORS[key].name} capturó una ficha de ${COLORS[otherKey].name}!`);
+            }
+          }
+        }
+      }
+    }
+  }
+  if(token.status==='home'){
+    log(`Una ficha de ${COLORS[key].name} llegó a casa.`);
+  }
+  layoutAllTokens();
+  buildProgressRow();
+
+  if(players[key].homeCount>=4){
+    endGame(key);
+    return;
+  }
+
+  if(diceValue===6){
+    canRoll = true;
+    document.getElementById('rollBtn').disabled = false;
+    log(`${COLORS[key].name} tira de nuevo por sacar 6.`);
+    updateHUD();
+  } else {
+    nextTurn();
+  }
+}
+
+function nextTurn(){
+  currentIdx = (currentIdx+1) % turnOrder.length;
+  diceValue = null;
+  canRoll = true;
+  awaitingSelection = false;
+  movableTokens = [];
+  consecutiveSixes = 0;
+  document.getElementById('rollBtn').disabled = false;
+  document.getElementById('diceNum').textContent = '?';
+  showHint(false);
+  updateHUD();
+}
+
+function endGame(colorKey){
+  gameOver = true;
+  document.getElementById('rollBtn').disabled = true;
+  const overlay = document.getElementById('winOverlay');
+  const dot = document.getElementById('winDot');
+  dot.style.background = '#'+COLORS[colorKey].hex.toString(16).padStart(6,'0');
+  dot.style.color = '#'+COLORS[colorKey].hex.toString(16).padStart(6,'0');
+  document.getElementById('winTitle').textContent = `¡${COLORS[colorKey].name} gana la partida!`;
+  overlay.style.display = 'flex';
+  log(`Fin de la partida — victoria de ${COLORS[colorKey].name}.`);
+}
+
+/* ============================================================
+   HUD
+   ============================================================ */
+
+function updateHUD(){
+  const key = currentColor();
+  const cfg = COLORS[key];
+  document.getElementById('turnDot').style.background = '#'+cfg.hex.toString(16).padStart(6,'0');
+  document.getElementById('turnText').innerHTML = `${cfg.name}<small>${awaitingSelection ? 'Selecciona una ficha' : (canRoll ? 'Puede tirar el dado' : 'Procesando…')}</small>`;
+}
+
+function buildProgressRow(){
+  const row = document.getElementById('progressRow');
+  row.innerHTML = '';
+  for(const key of activeColors){
+    const cfg = COLORS[key];
+    const chip = document.createElement('div');
+    chip.className='prog-chip';
+    chip.innerHTML = `<div class="dot" style="background:#${cfg.hex.toString(16).padStart(6,'0')}"></div><div class="cnt">${players[key].homeCount}/4</div>`;
+    row.appendChild(chip);
+  }
+}
+
+function log(msg){
+  document.getElementById('logBox').textContent = msg;
+}
+
+function showHint(on){
+  document.getElementById('hint').style.opacity = on ? '1' : '0';
+}
+
+/* ============================================================
+   OVERLAY DE INICIO
+   ============================================================ */
+
+let chosenCount = 4;
+document.querySelectorAll('.count-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.count-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    chosenCount = parseInt(btn.dataset.n,10);
+  });
+});
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  document.getElementById('startOverlay').style.display='none';
+  let colorsList;
+  if(chosenCount===2) colorsList=['red','yellow'];
+  else if(chosenCount===3) colorsList=['red','green','yellow'];
+  else colorsList=['red','green','yellow','blue'];
+  initGame(colorsList);
+});
+
+/* ============================================================
+   BUCLE DE RENDER
+   ============================================================ */
+
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  const elapsed = clock.getElapsedTime();
+
+  // animacion de la fuente
+  const drops = fountain.userData.droplets;
+  drops.forEach(d=>{
+    d.ang += dt*d.speed;
+    const yy = 2.4 + Math.sin(elapsed*d.speed*2 + d.yOff*10)*0.28 + 0.3;
+    d.mesh.position.set(Math.cos(d.ang)*d.r, yy, Math.sin(d.ang)*d.r);
+  });
+
+  // pulso de anillos brillantes en fichas movibles
+  const pulse = 0.7 + Math.sin(elapsed*5)*0.2;
+  for(const t of movableTokens){
+    t.mesh.userData.glowRing.scale.setScalar(1 + Math.sin(elapsed*5)*0.06);
+    if(t.mesh.userData.glowRing.material.opacity>0){
+      t.mesh.userData.glowRing.material.opacity = 0.55 + pulse*0.3;
+    }
+  }
+
+  // leve balanceo de arboles/decor (sutil, no todos)
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
