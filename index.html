@@ -192,8 +192,8 @@ function baseHeight(x,z){
   let ridged = 1 - Math.abs(fbm(x*0.022+50, z*0.022+50, 4)*2-1); // crestas
   ridged = Math.pow(Math.max(ridged,0), 2.2);
 
-  const rolling = n * 5;
-  const ringBoost = smoothstep(55, 220, d) * (0.5 + ridged*1.4) * 38;
+  const rolling = n * 1.6;
+  const ringBoost = smoothstep(170, 380, d) * (0.4 + ridged*1.0) * 9;
 
   let h = (rolling + ringBoost) * flatBlend;
 
@@ -201,7 +201,7 @@ function baseHeight(x,z){
   const rz = riverOffset(x);
   const distRiver = Math.abs(z - rz);
   const riverCarve = smoothstep(0, 15, distRiver);
-  const riverBed = -2.2;
+  const riverBed = -1.6;
   h = h*riverCarve + riverBed*(1-riverCarve);
 
   // proteger la plataforma central de quedar afectada por el río
@@ -252,18 +252,18 @@ for(let i=0;i<posAttr.count;i++){
     col = cPlateau.clone();
     const patch = fbm(x*0.05,z*0.05,2);
     col.offsetHSL(0,0,(patch-0.5)*0.05);
-  } else if(h < -1.4){
+  } else if(h < -1.0){
     col = cWater.clone();
-  } else if(h < 2.2){
+  } else if(h < 1.1){
     col = cGrassLo.clone().lerp(cGrassHi, fbm(x*0.03,z*0.03,3));
-  } else if(h < 9){
-    const t = smoothstep(2.2,9,h);
+  } else if(h < 3.2){
+    const t = smoothstep(1.1,3.2,h);
     col = cGrassHi.clone().lerp(cHill, t);
-  } else if(h < 17){
-    const t = smoothstep(9,17,h);
+  } else if(h < 7){
+    const t = smoothstep(3.2,7,h);
     col = cHill.clone().lerp(cRock, t);
   } else {
-    const t = smoothstep(17,24,h);
+    const t = smoothstep(7,11,h);
     col = cRock.clone().lerp(cSnow, t);
   }
 
@@ -395,7 +395,7 @@ function makeInstanced(geo, material, transforms){
 }
 
 const treeTransforms=[], pineTransforms=[], bushTransforms=[], rockTransforms=[];
-const STEP = 6.4;
+const STEP = 4.6;
 for(let x=-HALF+4; x<HALF-4; x+=STEP){
   for(let z=-HALF+4; z<HALF-4; z+=STEP){
     const jx = x + (Math.random()-0.5)*STEP*0.85;
@@ -405,26 +405,26 @@ for(let x=-HALF+4; x<HALF-4; x+=STEP){
 
     const h = baseHeight(jx,jz);
     const slope = slopeAt(jx,jz);
-    if(h < -1.0) continue; // agua
+    if(h < -0.7) continue; // agua
 
     const r = Math.random();
 
-    if(h>=0.2 && h<8 && slope<0.55){
-      if(r<0.34){
+    if(h>=0.05 && h<3.5 && slope<0.6){
+      if(r<0.60){
         treeTransforms.push({x:jx,y:h,z:jz, ry:Math.random()*Math.PI*2, scale:0.85+Math.random()*0.7});
-      } else if(r<0.55){
+      } else if(r<0.85){
         bushTransforms.push({x:jx,y:h,z:jz, ry:Math.random()*Math.PI*2, scale:0.8+Math.random()*0.6});
-      } else if(r<0.60 && slope>0.3){
+      } else if(r<0.90 && slope>0.3){
         rockTransforms.push({x:jx,y:h,z:jz, ry:Math.random()*Math.PI*2, scale:0.6+Math.random()*0.8});
       }
-    } else if(h>=8 && h<15 && slope<0.75){
-      if(r<0.28){
+    } else if(h>=3.5 && h<6.5 && slope<0.75){
+      if(r<0.45){
         pineTransforms.push({x:jx,y:h,z:jz, ry:Math.random()*Math.PI*2, scale:0.8+Math.random()*0.6});
-      } else if(r<0.4){
+      } else if(r<0.55){
         rockTransforms.push({x:jx,y:h,z:jz, ry:Math.random()*Math.PI*2, scale:0.7+Math.random()*1.0});
       }
-    } else if(h>=15 && h<20){
-      if(r<0.22){
+    } else if(h>=6.5 && h<9){
+      if(r<0.2){
         rockTransforms.push({x:jx,y:h,z:jz, ry:Math.random()*Math.PI*2, scale:0.9+Math.random()*1.3});
       }
     }
