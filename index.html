@@ -180,6 +180,8 @@ const HALF = TS/2;
 const SEG = 260;          // subdivisiones
 const FLAT_RADIUS = 34;   // zona central plana reservada para el futuro tablero
 
+const RIVER_BED = -1.6;
+
 function riverOffset(x){
   return 70 + Math.sin(x*0.008)*70 + Math.sin(x*0.028)*16;
 }
@@ -200,8 +202,8 @@ function baseHeight(x,z){
   // río: canal que serpentea, hunde el terreno cerca de su centro
   const rz = riverOffset(x);
   const distRiver = Math.abs(z - rz);
-  const riverCarve = smoothstep(0, 15, distRiver);
-  const riverBed = -1.6;
+  const riverCarve = smoothstep(2.5, 10.5, distRiver);
+  const riverBed = RIVER_BED;
   h = h*riverCarve + riverBed*(1-riverCarve);
 
   // proteger la plataforma central de quedar afectada por el río
@@ -249,9 +251,7 @@ for(let i=0;i<posAttr.count;i++){
   let col;
 
   if(d < FLAT_RADIUS){
-    col = cPlateau.clone();
-    const patch = fbm(x*0.05,z*0.05,2);
-    col.offsetHSL(0,0,(patch-0.5)*0.05);
+    col = cGrassLo.clone().lerp(cGrassHi, fbm(x*0.03,z*0.03,3));
   } else if(h < -1.0){
     col = cWater.clone();
   } else if(h < 1.1){
@@ -282,22 +282,70 @@ terrainMesh.receiveShadow = true;
 terrainMesh.castShadow = true;
 scene.add(terrainMesh);
 
-// anillo de piedra marcando la futura plataforma del tablero
-const ringMat = new THREE.MeshStandardMaterial({ color:0xcbb27a, roughness:0.7 });
-const ring = new THREE.Mesh(new THREE.RingGeometry(FLAT_RADIUS-1.2, FLAT_RADIUS, 64), ringMat);
-ring.rotation.x = -Math.PI/2;
-ring.position.y = 0.05;
-ring.receiveShadow = true;
-scene.add(ring);
+// nota: la plataforma central ya no se marca visualmente; el terreno queda
+// plano ahí (por dentro) pero con el mismo aspecto de pradera que el resto.
 
-// agua (un solo plano grande; solo "aparece" donde el terreno se hunde: río y orillas)
-const waterMat = new THREE.MeshStandardMaterial({
-  color:0x3f8fc2, roughness:0.15, metalness:0.1, transparent:true, opacity:0.85
-});
-const water = new THREE.Mesh(new THREE.PlaneGeometry(TS*1.05, TS*1.05, 1,1), waterMat);
-water.rotation.x = -Math.PI/2;
-water.position.y = -1.55;
-scene.add(water);
+/* ---- Río: cinta curva suave que sigue el cauce real (sin bordes en escalón) ---- */
+function buildRiverMesh(){
+  const samples = 340;
+  const positions = [];
+  const colors = [];
+  const indices = [];
+  const colDeep = new THREE.Color(0x2f6f9e);
+  const colShallow = new THREE.Color(0x6fb8de);
+
+  let vi = 0;
+  const pts = [];
+  for(let i=0;i<=samples;i++){
+    const x = -HALF + (i/samples)*TS;
+    pts.push({ x, z: riverOffset(x) });
+  }
+
+  for(let i=0;i<=samples;i++){
+    const p = pts[i];
+    const prev = pts[Math.max(0,i-1)];
+    const next = pts[Math.min(samples,i+1)];
+    let tx = next.x-prev.x, tz = next.z-prev.z;
+    const tlen = Math.hypot(tx,tz)||1;
+    tx/=tlen; tz/=tlen;
+    const nx = -tz, nz = tx; // normal perpendicular al cauce
+
+    const d = Math.sqrt(p.x*p.x + p.z*p.z);
+    const nearPlateau = d < FLAT_RADIUS+13;
+    const widthNoise = 4.2 + fbm(p.x*0.02, 800, 3)*2.6;
+    const w = nearPlateau ? 0.001 : widthNoise;
+
+    const y = RIVER_BED + 0.1;
+    const lx = p.x + nx*w, lz = p.z + nz*w;
+    const rx = p.x - nx*w, rz = p.z - nz*w;
+
+    positions.push(lx, y, lz,  rx, y, rz);
+    const shade = 0.35 + fbm(p.x*0.05, 300, 2)*0.5;
+    const c = colDeep.clone().lerp(colShallow, shade);
+    colors.push(c.r,c.g,c.b, c.r,c.g,c.b);
+    vi += 2;
+  }
+
+  for(let i=0;i<samples;i++){
+    const a=i*2, b=i*2+1, c=(i+1)*2, dd=(i+1)*2+1;
+    indices.push(a,b,c, b,dd,c);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+
+  const mat = new THREE.MeshStandardMaterial({
+    vertexColors:true, roughness:0.18, metalness:0.12,
+    transparent:true, opacity:0.88, side:THREE.DoubleSide
+  });
+  return new THREE.Mesh(geo, mat);
+}
+const river = buildRiverMesh();
+river.receiveShadow = false;
+scene.add(river);
 
 // terreno lejano difuminado por niebla para que no se vea el borde del mapa
 const farGround = new THREE.Mesh(
@@ -482,7 +530,7 @@ function animate(){
   });
 
   const t = clock.getElapsedTime();
-  water.material.opacity = 0.8 + Math.sin(t*0.8)*0.03;
+  river.material.opacity = 0.82 + Math.sin(t*0.8)*0.05;
 
   controls.update();
   renderer.render(scene, camera);
