@@ -96,10 +96,10 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const holder = document.getElementById('canvas-holder');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x9fd0e8);
-scene.fog = new THREE.Fog(0x9fd0e8, 90, 320);
+scene.fog = new THREE.Fog(0x9fd0e8, 180, 780);
 
-const camera = new THREE.PerspectiveCamera(48, window.innerWidth/window.innerHeight, 0.5, 900);
-camera.position.set(10, 95, 150);
+const camera = new THREE.PerspectiveCamera(48, window.innerWidth/window.innerHeight, 0.5, 2200);
+camera.position.set(25, 190, 320);
 
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -113,7 +113,7 @@ controls.target.set(0,4,0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.07;
 controls.minDistance = 12;
-controls.maxDistance = 260;
+controls.maxDistance = 620;
 controls.maxPolarAngle = Math.PI/2.08;
 controls.update();
 
@@ -130,9 +130,9 @@ const sun = new THREE.DirectionalLight(0xfff3d6, 1.25);
 sun.position.set(90, 130, 40);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048,2048);
-sun.shadow.camera.left = -140; sun.shadow.camera.right = 140;
-sun.shadow.camera.top = 140; sun.shadow.camera.bottom = -140;
-sun.shadow.camera.far = 320;
+sun.shadow.camera.left = -220; sun.shadow.camera.right = 220;
+sun.shadow.camera.top = 220; sun.shadow.camera.bottom = -220;
+sun.shadow.camera.far = 500;
 sun.shadow.bias = -0.0018;
 scene.add(sun);
 const fillLight = new THREE.DirectionalLight(0xcfe3ff, 0.28);
@@ -175,13 +175,13 @@ function rand(a,b){ return a+Math.random()*(b-a); }
    TERRENO: altura, río y plataforma central plana
    ============================================================ */
 
-const TS = 260;          // tamaño total del terreno
+const TS = 700;          // tamaño total del terreno (mundo casi abierto)
 const HALF = TS/2;
-const SEG = 170;          // subdivisiones
-const FLAT_RADIUS = 30;   // zona central plana reservada para el futuro tablero
+const SEG = 260;          // subdivisiones
+const FLAT_RADIUS = 34;   // zona central plana reservada para el futuro tablero
 
 function riverOffset(x){
-  return 58 + Math.sin(x*0.018)*20 + Math.sin(x*0.05)*6;
+  return 70 + Math.sin(x*0.008)*70 + Math.sin(x*0.028)*16;
 }
 
 function baseHeight(x,z){
@@ -193,7 +193,7 @@ function baseHeight(x,z){
   ridged = Math.pow(Math.max(ridged,0), 2.2);
 
   const rolling = n * 5;
-  const ringBoost = smoothstep(45, 105, d) * (0.5 + ridged*1.4) * 34;
+  const ringBoost = smoothstep(55, 220, d) * (0.5 + ridged*1.4) * 38;
 
   let h = (rolling + ringBoost) * flatBlend;
 
@@ -301,7 +301,7 @@ scene.add(water);
 
 // terreno lejano difuminado por niebla para que no se vea el borde del mapa
 const farGround = new THREE.Mesh(
-  new THREE.CircleGeometry(500,48),
+  new THREE.CircleGeometry(1300,48),
   new THREE.MeshStandardMaterial({ color:0x86b9d6, roughness:1 })
 );
 farGround.rotation.x = -Math.PI/2;
@@ -395,7 +395,7 @@ function makeInstanced(geo, material, transforms){
 }
 
 const treeTransforms=[], pineTransforms=[], bushTransforms=[], rockTransforms=[];
-const STEP = 4.4;
+const STEP = 6.4;
 for(let x=-HALF+4; x<HALF-4; x+=STEP){
   for(let z=-HALF+4; z<HALF-4; z+=STEP){
     const jx = x + (Math.random()-0.5)*STEP*0.85;
@@ -458,8 +458,8 @@ function makeCloud(x,y,z,scale){
   return g;
 }
 const clouds = [];
-for(let i=0;i<14;i++){
-  const c = makeCloud(rand(-HALF,HALF), rand(55,85), rand(-HALF,HALF), rand(2.2,4.5));
+for(let i=0;i<34;i++){
+  const c = makeCloud(rand(-HALF,HALF), rand(60,110), rand(-HALF,HALF), rand(2.5,5.5));
   clouds.push(c);
   scene.add(c);
 }
