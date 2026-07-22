@@ -52,6 +52,38 @@
     background: linear-gradient(180deg,#9fd0e8,#cdeaf5); color:#33301f; font-family:'Cinzel',serif;
     font-size:16px; letter-spacing:1px; transition:opacity .5s;
   }
+
+  #inventory{
+    position:absolute; top:16px; right:18px; z-index:10; width:172px;
+    background: var(--panel-bg); border:1px solid var(--panel-border); border-radius:14px;
+    padding:12px 14px; backdrop-filter: blur(6px); color:#f2ecd8;
+    box-shadow: 0 10px 26px rgba(0,0,0,0.3);
+  }
+  #inventory h3{ margin:0 0 8px; font-family:'Cinzel',serif; font-size:13px; letter-spacing:0.5px; color:var(--gold); text-transform:uppercase; }
+  #inventory .row{ display:flex; justify-content:space-between; font-size:12.5px; line-height:1.85; }
+  #inventory .row span.ic{ opacity:.9; }
+  #inventory .row span.n{ font-weight:700; color:#fff8e6; }
+
+  #mine-exit{
+    position:absolute; bottom:16px; left:50%; transform:translateX(-50%); z-index:20;
+    display:none; font-family:'Quicksand',sans-serif; font-weight:700; font-size:13px;
+    color:#2c2410; background: var(--gold); border:none; border-radius:20px;
+    padding:9px 20px; box-shadow:0 6px 16px rgba(0,0,0,0.35); cursor:pointer;
+  }
+  #mine-exit:hover{ filter:brightness(1.08); }
+
+  .float-pop{
+    position:fixed; z-index:60; pointer-events:none; font-weight:800; font-size:14px;
+    text-shadow:0 2px 6px rgba(0,0,0,0.6); transform:translate(-50%,-100%);
+    transition: transform 0.9s ease-out, opacity 0.9s ease-out; opacity:0.95;
+  }
+
+  .prompt-tag{
+    position:absolute; z-index:15; pointer-events:none; font-family:'Quicksand',sans-serif;
+    font-weight:700; font-size:11px; color:#fff8e6; background:rgba(20,26,18,0.75);
+    padding:4px 10px; border-radius:12px; border:1px solid var(--panel-border);
+    transform:translate(-50%,-130%); white-space:nowrap;
+  }
 </style>
 </head>
 <body>
@@ -66,6 +98,8 @@
   <div class="sub">Construyendo el juego paso a paso</div>
   <ul>
     <li class="done"><b>El mapa</b> (terreno 3D)</li>
+    <li class="done"><b>Recursos, granja y minas</b></li>
+    <li class="next">IA con cuerpo propio</li>
     <li class="next">Multijugador</li>
     <li class="next">Personalizar / vestir personaje</li>
     <li class="next">Diseño de texturas</li>
@@ -73,7 +107,21 @@
   </ul>
 </div>
 
-<div id="hint">🖱️ Arrastra para orbitar · rueda para acercar/alejar</div>
+<div id="hint">🖱️ Arrastra para orbitar · rueda para acercar/alejar · clic para recolectar</div>
+
+<div id="inventory">
+  <h3>Inventario</h3>
+  <div class="row"><span class="ic">🪵 Madera</span><span class="n" id="inv-madera">0</span></div>
+  <div class="row"><span class="ic">🪨 Piedra</span><span class="n" id="inv-piedra">0</span></div>
+  <div class="row"><span class="ic">💎 Cristal</span><span class="n" id="inv-cristal">0</span></div>
+  <div class="row"><span class="ic">⛏️ Hierro</span><span class="n" id="inv-hierro">0</span></div>
+  <div class="row"><span class="ic">🟡 Oro</span><span class="n" id="inv-oro">0</span></div>
+  <div class="row"><span class="ic">🐑 Lana</span><span class="n" id="inv-lana">0</span></div>
+  <div class="row"><span class="ic">🥚 Huevos</span><span class="n" id="inv-huevos">0</span></div>
+  <div class="row"><span class="ic">🥛 Leche</span><span class="n" id="inv-leche">0</span></div>
+</div>
+
+<button id="mine-exit">⤴ Salir de la mina</button>
 
 <script type="importmap">
 {
@@ -97,6 +145,10 @@ const holder = document.getElementById('canvas-holder');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x9fd0e8);
 scene.fog = new THREE.Fog(0x9fd0e8, 180, 780);
+
+// objetos que pertenecen al mundo exterior (se ocultan al entrar a una mina)
+const surfaceObjects = [];
+function addSurface(obj){ scene.add(obj); surfaceObjects.push(obj); return obj; }
 
 const camera = new THREE.PerspectiveCamera(48, window.innerWidth/window.innerHeight, 0.5, 2200);
 camera.position.set(25, 190, 320);
@@ -280,7 +332,7 @@ const terrainMat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness
 const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
 terrainMesh.receiveShadow = true;
 terrainMesh.castShadow = true;
-scene.add(terrainMesh);
+addSurface(terrainMesh);
 
 // nota: la plataforma central ya no se marca visualmente; el terreno queda
 // plano ahí (por dentro) pero con el mismo aspecto de pradera que el resto.
@@ -345,7 +397,7 @@ function buildRiverMesh(){
 }
 const river = buildRiverMesh();
 river.receiveShadow = false;
-scene.add(river);
+addSurface(river);
 
 // terreno lejano difuminado por niebla para que no se vea el borde del mapa
 const farGround = new THREE.Mesh(
@@ -354,7 +406,7 @@ const farGround = new THREE.Mesh(
 );
 farGround.rotation.x = -Math.PI/2;
 farGround.position.y = -3;
-scene.add(farGround);
+addSurface(farGround);
 
 /* ============================================================
    VEGETACIÓN Y ROCAS (instanciado para rendimiento)
@@ -482,10 +534,455 @@ for(let x=-HALF+4; x<HALF-4; x+=STEP){
 const leafMat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.9 });
 const rockMat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.95 });
 
-if(treeTransforms.length) scene.add(makeInstanced(buildTreeGeometry(), leafMat, treeTransforms));
-if(pineTransforms.length) scene.add(makeInstanced(buildPineGeometry(), leafMat, pineTransforms));
-if(bushTransforms.length) scene.add(makeInstanced(buildBushGeometry(), leafMat, bushTransforms));
-if(rockTransforms.length) scene.add(makeInstanced(buildRockGeometry(), rockMat, rockTransforms));
+if(treeTransforms.length) addSurface(makeInstanced(buildTreeGeometry(), leafMat, treeTransforms));
+if(pineTransforms.length) addSurface(makeInstanced(buildPineGeometry(), leafMat, pineTransforms));
+if(bushTransforms.length) addSurface(makeInstanced(buildBushGeometry(), leafMat, bushTransforms));
+if(rockTransforms.length) addSurface(makeInstanced(buildRockGeometry(), rockMat, rockTransforms));
+
+/* ============================================================
+   INVENTARIO Y RETROALIMENTACIÓN VISUAL
+   ============================================================ */
+
+const inventory = { madera:0, piedra:0, cristal:0, hierro:0, oro:0, lana:0, huevos:0, leche:0 };
+function updateInventoryHUD(){
+  for(const k in inventory){
+    const el = document.getElementById('inv-'+k);
+    if(el) el.textContent = inventory[k];
+  }
+}
+function spawnFloatText(text, x, y, color){
+  const el = document.createElement('div');
+  el.className = 'float-pop';
+  el.textContent = text;
+  el.style.left = x+'px';
+  el.style.top = y+'px';
+  el.style.color = color || '#fff8e6';
+  document.body.appendChild(el);
+  requestAnimationFrame(()=>{ el.style.transform = 'translate(-50%,-190%)'; el.style.opacity = '0'; });
+  setTimeout(()=> el.remove(), 950);
+}
+
+/* ============================================================
+   RECURSOS RECOLECTABLES (madera, piedra, cristal, mineral)
+   ============================================================ */
+
+const RESPAWN_MS = 22000;
+const resourceNodes = []; // {mesh, type, amount, label, color}
+
+function makeLogPile(){
+  const g = new THREE.Group();
+  for(let i=0;i<3;i++){
+    const log = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.32,0.32,1.7,8),
+      new THREE.MeshStandardMaterial({ color:0x7a5230, roughness:0.9 })
+    );
+    log.rotation.z = Math.PI/2;
+    log.position.set(0, 0.32+i*0.62, (i-1)*0.05);
+    log.castShadow = true; log.receiveShadow = true;
+    g.add(log);
+  }
+  return g;
+}
+function makeOreBoulder(hex, glow){
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.95,0),
+    new THREE.MeshStandardMaterial({ color:0x716a5f, roughness:0.95 })
+  );
+  base.castShadow = true; base.receiveShadow = true;
+  g.add(base);
+  for(let i=0;i<4;i++){
+    const vein = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.2+Math.random()*0.12,0),
+      new THREE.MeshStandardMaterial({ color:hex, emissive: glow?hex:0x000000, emissiveIntensity: glow?0.55:0, roughness:0.4, metalness:0.3 })
+    );
+    vein.position.set((Math.random()-0.5)*1.1, (Math.random()-0.5)*0.6+0.4, (Math.random()-0.5)*1.1);
+    g.add(vein);
+  }
+  return g;
+}
+function makeCrystalCluster(){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color:0x7fd8e6, emissive:0x3fa0c2, emissiveIntensity:0.5, roughness:0.15, metalness:0.1, transparent:true, opacity:0.92 });
+  for(let i=0;i<5;i++){
+    const h = 0.7+Math.random()*1.1;
+    const shard = new THREE.Mesh(new THREE.ConeGeometry(0.2+Math.random()*0.12, h, 6), mat);
+    shard.position.set((Math.random()-0.5)*0.7, h/2, (Math.random()-0.5)*0.7);
+    shard.rotation.z = (Math.random()-0.5)*0.3;
+    shard.castShadow = true;
+    g.add(shard);
+  }
+  return g;
+}
+
+function addResourceNode(type, x, z, amount, label, color){
+  const h = baseHeight(x,z);
+  let mesh;
+  if(type==='madera') mesh = makeLogPile();
+  else if(type==='piedra') mesh = makeOreBoulder(0x8d8479, false);
+  else if(type==='hierro') mesh = makeOreBoulder(0xb5651d, true);
+  else if(type==='oro') mesh = makeOreBoulder(0xe8c34a, true);
+  else mesh = makeCrystalCluster();
+  mesh.position.set(x, h, z);
+  mesh.userData.kind = 'resource';
+  mesh.userData.nodeIndex = resourceNodes.length;
+  addSurface(mesh);
+  resourceNodes.push({ mesh, type, amount, label, color });
+}
+
+// dispersar recursos por el mapa evitando la plataforma central, el agua y zonas de mina
+const RESOURCE_COUNT = { madera:26, piedra:20, hierro:12, oro:6, cristal:9 };
+function scatterResources(){
+  const plans = [];
+  for(const t in RESOURCE_COUNT) for(let i=0;i<RESOURCE_COUNT[t]; i++) plans.push(t);
+  let tries = 0;
+  let i = 0;
+  while(i < plans.length && tries < plans.length*30){
+    tries++;
+    const x = rand(-HALF+20, HALF-20);
+    const z = rand(-HALF+20, HALF-20);
+    const d = Math.sqrt(x*x+z*z);
+    if(d < FLAT_RADIUS+16) continue;
+    const h = baseHeight(x,z);
+    if(h < -0.5) continue; // agua
+    const type = plans[i];
+    // el mineral y el cristal prefieren zonas altas/rocosas, la madera y piedra zonas bajas
+    if((type==='hierro'||type==='oro'||type==='cristal') && h < 3.0) continue;
+    if((type==='madera') && h > 4.5) continue;
+    addResourceNode(type, x, z, type==='oro'?1:(type==='hierro'?2:3),
+      type[0].toUpperCase()+type.slice(1), 0xffffff);
+    i++;
+  }
+}
+scatterResources();
+
+/* ============================================================
+   ANIMALES DE GRANJA (se pueden cultivar / cosechar)
+   ============================================================ */
+
+const ANIMAL_COOLDOWN_MS = 18000;
+const animals = []; // {group, type, product, pos:{x,z}, dir, home, radius, readyAt, indicator}
+
+function makeSheep(){
+  const g = new THREE.Group();
+  const wool = new THREE.MeshStandardMaterial({ color:0xf4f1e6, roughness:1 });
+  const skin = new THREE.MeshStandardMaterial({ color:0x2c2822, roughness:0.8 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.55,10,8), wool);
+  body.scale.set(1.25,0.95,1); body.position.y = 0.62;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.26,8,7), skin);
+  head.position.set(0.68,0.68,0);
+  g.add(body,head);
+  for(const sx of [-0.3,0.3]) for(const sz of [-0.22,0.22]){
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,0.42,6), skin);
+    leg.position.set(sx,0.21,sz); g.add(leg);
+  }
+  g.traverse(o=>{ if(o.isMesh){o.castShadow=true; o.receiveShadow=true;} });
+  return g;
+}
+function makeChicken(){
+  const g = new THREE.Group();
+  const feather = new THREE.MeshStandardMaterial({ color:0xf2e4c8, roughness:0.9 });
+  const comb = new THREE.MeshStandardMaterial({ color:0xd1483f, roughness:0.7 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.28,8,7), feather);
+  body.scale.set(1,1.05,1.3); body.position.y=0.32;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.14,8,7), feather);
+  head.position.set(0,0.5,0.32);
+  const combM = new THREE.Mesh(new THREE.ConeGeometry(0.05,0.1,6), comb);
+  combM.position.set(0,0.6,0.32);
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.05,0.12,6), comb);
+  beak.rotation.z = Math.PI/2; beak.position.set(0.16,0.48,0.32);
+  g.add(body,head,combM,beak);
+  g.traverse(o=>{ if(o.isMesh){o.castShadow=true; o.receiveShadow=true;} });
+  return g;
+}
+function makeCow(){
+  const g = new THREE.Group();
+  const hide = new THREE.MeshStandardMaterial({ color:0xece6d8, roughness:0.9 });
+  const patch = new THREE.MeshStandardMaterial({ color:0x2c2822, roughness:0.9 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.72,10,8), hide);
+  body.scale.set(1.4,1,1.05); body.position.y=0.82;
+  const spot = new THREE.Mesh(new THREE.SphereGeometry(0.26,8,7), patch);
+  spot.scale.set(1,0.5,1); spot.position.set(0.3,1.05,0.2);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.32,8,7), hide);
+  head.position.set(0.95,0.8,0);
+  g.add(body,spot,head);
+  for(const sx of [-0.42,0.42]) for(const sz of [-0.28,0.28]){
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,0.55,6), hide);
+    leg.position.set(sx,0.27,sz); g.add(leg);
+  }
+  g.traverse(o=>{ if(o.isMesh){o.castShadow=true; o.receiveShadow=true;} });
+  return g;
+}
+
+function addAnimal(type, x, z){
+  let group, product, homeRadius;
+  if(type==='oveja'){ group = makeSheep(); product='lana'; homeRadius=14; }
+  else if(type==='gallina'){ group = makeChicken(); product='huevos'; homeRadius=9; }
+  else { group = makeCow(); product='leche'; homeRadius=16; }
+
+  const h = baseHeight(x,z);
+  group.position.set(x,h,z);
+  group.userData.kind = 'animal';
+  group.userData.animalIndex = animals.length;
+  addSurface(group);
+
+  const indicator = new THREE.Mesh(
+    new THREE.SphereGeometry(0.14,8,8),
+    new THREE.MeshBasicMaterial({ color:0x8fe08a })
+  );
+  indicator.position.y = (type==='vaca'?2.0:type==='oveja'?1.35:0.85);
+  group.add(indicator);
+
+  animals.push({
+    group, type, product, home:{x,z}, radius:homeRadius,
+    dir: Math.random()*Math.PI*2, speed: 0.5+Math.random()*0.4,
+    readyAt: 0, indicator
+  });
+}
+
+// las granjas se ubican en el anillo de pradera alrededor de la plataforma central
+const FARM_SPOTS = [
+  {type:'oveja', n:5, cx:60, cz:40, r:16},
+  {type:'oveja', n:4, cx:-70, cz:-30, r:14},
+  {type:'gallina', n:6, cx:48, cz:-60, r:10},
+  {type:'vaca', n:4, cx:-55, cz:70, r:18},
+];
+FARM_SPOTS.forEach(spot=>{
+  for(let i=0;i<spot.n;i++){
+    let x,z,d,tries=0;
+    do{
+      x = spot.cx + rand(-spot.r,spot.r);
+      z = spot.cz + rand(-spot.r,spot.r);
+      d = Math.sqrt(x*x+z*z);
+      tries++;
+    } while((d < FLAT_RADIUS+18 || baseHeight(x,z) < 0 || baseHeight(x,z) > 3.0) && tries<40);
+    addAnimal(spot.type, x, z);
+  }
+});
+
+/* ============================================================
+   MINAS Y PASAJES SUBTERRÁNEOS
+   ============================================================ */
+
+const mineEntrances = []; // {mesh, promptEl}
+const stoneMat = new THREE.MeshStandardMaterial({ color:0x746a5c, roughness:1 });
+const darkMat = new THREE.MeshStandardMaterial({ color:0x0c0a08, roughness:1 });
+
+function makeMineEntrance(){
+  const g = new THREE.Group();
+  const frameL = new THREE.Mesh(new THREE.BoxGeometry(0.8,3.2,1.4), stoneMat);
+  frameL.position.set(-1.6,1.6,0);
+  const frameR = frameL.clone(); frameR.position.x = 1.6;
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(4.0,0.8,1.4), stoneMat);
+  lintel.position.set(0,3.2,0);
+  const mouth = new THREE.Mesh(new THREE.CircleGeometry(1.35,16), darkMat);
+  mouth.position.set(0,1.55,0.55);
+  g.add(frameL,frameR,lintel,mouth);
+  g.traverse(o=>{ if(o.isMesh){o.castShadow=true; o.receiveShadow=true;} });
+  return g;
+}
+
+const MINE_SPOTS = [ {x:150,z:-40}, {x:-160,z:60}, {x:70,z:170} ];
+MINE_SPOTS.forEach((spot,idx)=>{
+  const h = baseHeight(spot.x, spot.z);
+  const mesh = makeMineEntrance();
+  mesh.position.set(spot.x, h, spot.z);
+  const dir = Math.atan2(-spot.z, -spot.x);
+  mesh.rotation.y = dir + Math.PI/2;
+  mesh.userData.kind = 'mine';
+  mesh.userData.mineIndex = idx;
+  addSurface(mesh);
+  mineEntrances.push({ mesh });
+});
+
+// --- red subterránea: una cámara central con varios pasajes ramificados ---
+const undergroundGroup = new THREE.Group();
+undergroundGroup.visible = false;
+scene.add(undergroundGroup);
+
+const undergroundLight = new THREE.AmbientLight(0x2a3040, 0.9);
+undergroundGroup.add(undergroundLight);
+
+const tunnelWallMat = new THREE.MeshStandardMaterial({ color:0x5c5348, roughness:1 });
+const tunnelFloorMat = new THREE.MeshStandardMaterial({ color:0x433c33, roughness:1 });
+
+function buildChamberFloorWalls(radius, height){
+  const g = new THREE.Group();
+  const floor = new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,0.6,20), tunnelFloorMat);
+  floor.position.y = -0.3;
+  floor.receiveShadow = true;
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(radius+0.6,radius+0.6,height,20,1,true), tunnelWallMat);
+  wall.material.side = THREE.BackSide;
+  wall.position.y = height/2 - 0.3;
+  g.add(floor, wall);
+  return g;
+}
+function buildCorridor(length, width, height){
+  const g = new THREE.Group();
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(length,0.5,width), tunnelFloorMat);
+  floor.position.set(length/2,-0.3,0);
+  floor.receiveShadow = true;
+  const wallL = new THREE.Mesh(new THREE.BoxGeometry(length,height,0.4), tunnelWallMat);
+  wallL.position.set(length/2, height/2-0.3, width/2);
+  const wallR = wallL.clone(); wallR.position.z = -width/2;
+  const ceil = new THREE.Mesh(new THREE.BoxGeometry(length,0.4,width), tunnelWallMat);
+  ceil.position.set(length/2, height-0.3, 0);
+  g.add(floor,wallL,wallR,ceil);
+  return g;
+}
+
+const hub = buildChamberFloorWalls(15, 6.5);
+undergroundGroup.add(hub);
+const hubLight = new THREE.PointLight(0xffb877, 1.4, 40);
+hubLight.position.set(0,5,0);
+undergroundGroup.add(hubLight);
+
+const oreNodes = []; // {mesh, type, amount}
+function addOreNode(type, x, z){
+  let mesh, color, glow=true;
+  if(type==='cristal') mesh = makeCrystalCluster();
+  else if(type==='oro') mesh = makeOreBoulder(0xe8c34a, true);
+  else mesh = makeOreBoulder(0xb5651d, true);
+  mesh.position.set(x, 0, z);
+  mesh.userData.kind = 'ore';
+  mesh.userData.oreIndex = oreNodes.length;
+  undergroundGroup.add(mesh);
+  oreNodes.push({ mesh, type, amount: type==='oro'?2:3 });
+}
+
+// varios pasajes que se ramifican desde la cámara central hacia cámaras con vetas de mineral
+const PASSAGES = [0, 72, 144, 216, 288].map(deg => deg*Math.PI/180);
+PASSAGES.forEach((angle, idx)=>{
+  const length = 34 + (idx%3)*8;
+  const corridor = buildCorridor(length, 5.5, 5);
+  corridor.position.set(Math.cos(angle)*15, 0, Math.sin(angle)*15);
+  corridor.rotation.y = -angle;
+  undergroundGroup.add(corridor);
+
+  const torch = new THREE.PointLight(0xffa04d, 0.9, 22);
+  torch.position.set(Math.cos(angle)*(15+length*0.55), 3, Math.sin(angle)*(15+length*0.55));
+  undergroundGroup.add(torch);
+
+  const endX = Math.cos(angle)*(15+length);
+  const endZ = Math.sin(angle)*(15+length);
+  const chamber = buildChamberFloorWalls(11, 6);
+  chamber.position.set(endX, 0, endZ);
+  undergroundGroup.add(chamber);
+  const chamberLight = new THREE.PointLight(0x8fd8ff, 1.1, 30);
+  chamberLight.position.set(endX,4,endZ);
+  undergroundGroup.add(chamberLight);
+
+  const oreType = idx%3===0 ? 'oro' : (idx%3===1 ? 'cristal' : 'hierro');
+  for(let i=0;i<3;i++){
+    const ox = endX + Math.cos(angle+i*1.7)*(3+Math.random()*4);
+    const oz = endZ + Math.sin(angle+i*1.7)*(3+Math.random()*4);
+    addOreNode(oreType, ox, oz);
+  }
+});
+
+/* --- transición superficie / mina --- */
+let inMine = false;
+const savedCam = { pos:new THREE.Vector3(), target:new THREE.Vector3() };
+const mineExitBtn = document.getElementById('mine-exit');
+const hintEl = document.getElementById('hint');
+
+function enterMine(){
+  if(inMine) return;
+  inMine = true;
+  savedCam.pos.copy(camera.position);
+  savedCam.target.copy(controls.target);
+
+  surfaceObjects.forEach(o=> o.visible=false);
+  undergroundGroup.visible = true;
+  hemi.intensity = 0.15;
+  sun.intensity = 0.1;
+  scene.fog = new THREE.Fog(0x0c0a08, 40, 220);
+  scene.background = new THREE.Color(0x0c0a08);
+
+  camera.position.set(0, 30, 46);
+  controls.target.set(0,3,0);
+  controls.minDistance = 8; controls.maxDistance = 140;
+  controls.update();
+
+  mineExitBtn.style.display = 'block';
+  hintEl.textContent = '⛏️ Explora los pasajes y haz clic en las vetas para recolectar';
+}
+function exitMine(){
+  if(!inMine) return;
+  inMine = false;
+  surfaceObjects.forEach(o=> o.visible=true);
+  undergroundGroup.visible = false;
+  hemi.intensity = 0.9;
+  sun.intensity = 1.25;
+  scene.fog = new THREE.Fog(0x9fd0e8, 180, 780);
+  scene.background = new THREE.Color(0x9fd0e8);
+
+  camera.position.copy(savedCam.pos);
+  controls.target.copy(savedCam.target);
+  controls.minDistance = 12; controls.maxDistance = 620;
+  controls.update();
+
+  mineExitBtn.style.display = 'none';
+  hintEl.textContent = '🖱️ Arrastra para orbitar · rueda para acercar/alejar · clic para recolectar';
+}
+mineExitBtn.addEventListener('click', exitMine);
+
+/* ============================================================
+   INTERACCIÓN: recolectar recursos, cosechar animales, entrar a minas
+   ============================================================ */
+
+const raycaster = new THREE.Raycaster();
+const pointerNDC = new THREE.Vector2();
+
+function findInteractive(obj){
+  let o = obj;
+  while(o){ if(o.userData && o.userData.kind) return o; o = o.parent; }
+  return null;
+}
+
+renderer.domElement.addEventListener('pointerdown', (ev)=>{
+  pointerNDC.x = (ev.clientX/window.innerWidth)*2-1;
+  pointerNDC.y = -(ev.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(pointerNDC, camera);
+
+  const pool = inMine ? oreNodes.map(n=>n.mesh) :
+    [...resourceNodes.filter(n=>n.mesh.visible).map(n=>n.mesh),
+     ...animals.map(a=>a.group),
+     ...mineEntrances.map(e=>e.mesh)];
+
+  const hits = raycaster.intersectObjects(pool, true);
+  if(!hits.length) return;
+  const target = findInteractive(hits[0].object);
+  if(!target) return;
+
+  if(target.userData.kind === 'mine'){
+    enterMine();
+  } else if(target.userData.kind === 'resource'){
+    const node = resourceNodes[target.userData.nodeIndex];
+    inventory[node.type] += node.amount;
+    updateInventoryHUD();
+    spawnFloatText(`+${node.amount} ${node.type}`, ev.clientX, ev.clientY, '#ffe9b0');
+    node.mesh.visible = false;
+    setTimeout(()=>{ node.mesh.visible = true; }, RESPAWN_MS);
+  } else if(target.userData.kind === 'animal'){
+    const animal = animals[target.userData.animalIndex];
+    const now = performance.now();
+    if(now < animal.readyAt) return;
+    const amount = animal.product==='huevos' ? 2 : 1;
+    inventory[animal.product] += amount;
+    updateInventoryHUD();
+    spawnFloatText(`+${amount} ${animal.product}`, ev.clientX, ev.clientY, '#bff2b0');
+    animal.readyAt = now + ANIMAL_COOLDOWN_MS;
+    animal.indicator.material.color.set(0x9a4a3f);
+  } else if(target.userData.kind === 'ore'){
+    const node = oreNodes[target.userData.oreIndex];
+    inventory[node.type] += node.amount;
+    updateInventoryHUD();
+    spawnFloatText(`+${node.amount} ${node.type}`, ev.clientX, ev.clientY, '#9fe0ff');
+    node.mesh.visible = false;
+    setTimeout(()=>{ node.mesh.visible = true; }, RESPAWN_MS);
+  }
+});
 
 /* ============================================================
    CIELO: nubes simples a la deriva
@@ -509,7 +1006,7 @@ const clouds = [];
 for(let i=0;i<34;i++){
   const c = makeCloud(rand(-HALF,HALF), rand(60,110), rand(-HALF,HALF), rand(2.5,5.5));
   clouds.push(c);
-  scene.add(c);
+  addSurface(c);
 }
 
 /* ============================================================
@@ -531,6 +1028,24 @@ function animate(){
 
   const t = clock.getElapsedTime();
   river.material.opacity = 0.82 + Math.sin(t*0.8)*0.05;
+
+  // deambular de los animales dentro de su radio de granja
+  const now = performance.now();
+  animals.forEach(a=>{
+    if(Math.random()<0.01) a.dir += (Math.random()-0.5)*1.4;
+    const nx = a.group.position.x + Math.cos(a.dir)*a.speed*dt;
+    const nz = a.group.position.z + Math.sin(a.dir)*a.speed*dt;
+    const dHome = Math.hypot(nx-a.home.x, nz-a.home.z);
+    if(dHome > a.radius){
+      a.dir = Math.atan2(a.home.z-nz, a.home.x-nx) + (Math.random()-0.5)*0.6;
+    } else {
+      a.group.position.x = nx; a.group.position.z = nz;
+      a.group.position.y = baseHeight(nx,nz);
+    }
+    a.group.rotation.y = -a.dir + Math.PI/2;
+    const ready = now >= a.readyAt;
+    a.indicator.material.color.set(ready ? 0x8fe08a : 0x9a4a3f);
+  });
 
   controls.update();
   renderer.render(scene, camera);
