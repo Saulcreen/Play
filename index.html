@@ -155,12 +155,6 @@ function addSurface(obj){ scene.add(obj); surfaceObjects.push(obj); return obj; 
 const camera = new THREE.PerspectiveCamera(48, window.innerWidth/window.innerHeight, 0.5, 2200);
 camera.position.set(25, 190, 320);
 
-// luz que acompaña a la cámara como una linterna — así se puede ver la tierra
-// y la roca del subsuelo aunque no se esté cerca de las antorchas de una mina
-const headlamp = new THREE.PointLight(0xffd9a0, 0, 75);
-camera.add(headlamp);
-scene.add(camera);
-
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
@@ -172,12 +166,11 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0,4,0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.07;
-controls.minDistance = 6;
+controls.minDistance = 8;
 controls.maxDistance = 620;
-// ahora que hay tierra y roca sólidas bajo todo el mapa (no solo en las minas),
-// la cámara puede bajar y mirar libremente en cualquier dirección, en cualquier lugar
-controls.maxPolarAngle = Math.PI * 0.985;
-controls.screenSpacePanning = true;
+const SURFACE_MAX_POLAR = Math.PI/2.08;
+const MINE_MAX_POLAR = Math.PI*0.97; // dentro de la mina se libera para mirar en todas direcciones
+controls.maxPolarAngle = SURFACE_MAX_POLAR;
 controls.update();
 
 window.addEventListener('resize', ()=>{
@@ -344,80 +337,6 @@ const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
 terrainMesh.receiveShadow = true;
 terrainMesh.castShadow = true;
 addSurface(terrainMesh);
-
-/* ============================================================
-   SUBSUELO SÓLIDO: como un "chunk" de Minecraft — tierra justo
-   debajo del césped y roca más profundo, cubriendo TODO el mapa
-   (no solo las minas), para que cavar en cualquier punto muestre
-   algo sólido en vez del vacío.
-   ============================================================ */
-
-const UNDERGROUND_BOTTOM = -100; // "lecho de roca" bien por debajo de las minas más profundas
-
-// techo subterráneo: repite exactamente el contorno del terreno, apenas más
-// abajo, visto solo desde debajo (la cara interior de la tierra, color tierra)
-const undergroundCeilingMat = new THREE.MeshStandardMaterial({ color:0x6b4a34, roughness:1, side:THREE.BackSide });
-const undergroundCeiling = new THREE.Mesh(terrainGeo, undergroundCeilingMat);
-undergroundCeiling.position.y = -1.2;
-addSurface(undergroundCeiling);
-
-// lecho de roca: piso sólido muy abajo, visible al mirar hacia abajo desde el subsuelo
-const bedrockGeo = new THREE.PlaneGeometry(TS, TS, 1, 1);
-bedrockGeo.rotateX(-Math.PI/2);
-const bedrockMat = new THREE.MeshStandardMaterial({ color:0x3a3630, roughness:1 });
-const bedrock = new THREE.Mesh(bedrockGeo, bedrockMat);
-bedrock.position.y = UNDERGROUND_BOTTOM;
-addSurface(bedrock);
-
-// paredes del borde del mapa, con degradado de tierra (arriba) a roca (abajo),
-// para cerrar el volumen del subsuelo y que se sienta un bloque sólido, no una caja vacía
-function buildUndergroundSkirt(){
-  const positions = [], colors = [], indices = [];
-  const dirt = new THREE.Color(0x6b4a34), stone = new THREE.Color(0x4a463f);
-  const bands = 6, steps = 140;
-  const perim = [];
-  for(let i=0;i<=steps;i++){
-    const t = i/steps;
-    const side = Math.floor(t*4);
-    const localT = (t*4) % 1;
-    let x,z;
-    if(side===0){ x = -HALF + localT*TS; z = -HALF; }
-    else if(side===1){ x = HALF; z = -HALF + localT*TS; }
-    else if(side===2){ x = HALF - localT*TS; z = HALF; }
-    else { x = -HALF; z = HALF - localT*TS; }
-    perim.push({x, z, h: baseHeight(x,z)});
-  }
-  for(let i=0;i<perim.length;i++){
-    const p = perim[i];
-    for(let b=0; b<=bands; b++){
-      const bt = b/bands;
-      const y = THREE.MathUtils.lerp(p.h - 1.2, UNDERGROUND_BOTTOM, bt);
-      positions.push(p.x, y, p.z);
-      const c = dirt.clone().lerp(stone, bt);
-      colors.push(c.r,c.g,c.b);
-    }
-  }
-  const rowLen = bands+1;
-  for(let i=0;i<perim.length-1;i++){
-    for(let b=0;b<bands;b++){
-      const a0=i*rowLen+b, a1=i*rowLen+b+1, b0=(i+1)*rowLen+b, b1=(i+1)*rowLen+b+1;
-      indices.push(a0,b0,a1, a1,b0,b1);
-    }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
-  geo.setIndex(indices);
-  geo.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:1, side:THREE.DoubleSide });
-  return new THREE.Mesh(geo, mat);
-}
-addSurface(buildUndergroundSkirt());
-
-// luz tenue permanente bajo tierra, para que la tierra y la roca del
-// subsuelo se puedan ver incluso lejos de las antorchas de las minas
-const undergroundAmbient = new THREE.AmbientLight(0x4a4030, 0.55);
-scene.add(undergroundAmbient);
 
 // nota: la plataforma central ya no se marca visualmente; el terreno queda
 // plano ahí (por dentro) pero con el mismo aspecto de pradera que el resto.
@@ -864,6 +783,25 @@ function makeMineEntrance(){
   mouth.position.set(0,1.55,0.55);
   g.add(frameL,frameR,lintel,mouth);
   g.traverse(o=>{ if(o.isMesh){o.castShadow=true; o.receiveShadow=true;} });
+
+  // luz cálida a la entrada, para que se note desde lejos y no se pierda en las sombras
+  const glow = new THREE.PointLight(0xffb877, 1.1, 26);
+  glow.position.set(0, 2.4, 1.6);
+  g.add(glow);
+
+  // letrero flotante con pico, para que se vea claro que ahí se puede entrar a minar
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.font = '84px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('⛏️', 64, 68);
+  const labelTex = new THREE.CanvasTexture(canvas);
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map:labelTex, transparent:true, depthTest:false }));
+  label.scale.set(3.2,3.2,1);
+  label.position.set(0, 5.6, 0);
+  g.add(label);
+
   return g;
 }
 
@@ -933,7 +871,6 @@ function buildMineNetwork(mineIdx){
     mesh.position.set(x, 0, z);
     mesh.userData.kind = 'ore';
     mesh.userData.oreIndex = oreNodes.length;
-    mesh.userData.mineIndex = mineIdx;
     group.add(mesh);
     oreNodes.push({ mesh, type, amount: type==='oro'?2:3 });
   }
@@ -1075,50 +1012,42 @@ function enterMine(mineIdx){
   savedCam.pos.copy(camera.position);
   savedCam.target.copy(controls.target);
 
-  // la mina ya está en su sitio bajo tierra (siempre visible): solo bajamos
-  // la cámara por el pozo, sin ocultar la superficie — así se siente un
-  // mundo continuo, como cavar hacia abajo en Minecraft
+  // la mina ya está en su sitio, bajo el pasto — solo bajamos la cámara por
+  // el pozo hacia el subsuelo, sin ocultar la superficie
   const origin = mineNetworks[mineIdx].group.position;
+  hemi.intensity = 0.4;
+  sun.intensity = 0.35;
+  scene.fog = new THREE.Fog(0x14100c, 45, 300);
+  scene.background = new THREE.Color(0x14100c);
+
   camera.position.set(origin.x, origin.y+42, origin.z+62);
   controls.target.set(origin.x, origin.y+3, origin.z);
+  controls.maxPolarAngle = MINE_MAX_POLAR;
+  controls.minDistance = 8; controls.maxDistance = 260;
   controls.update();
 
   mineExitBtn.style.display = 'block';
-  hintEl.textContent = '⛏️ Explora los pasajes y haz clic en las vetas para recolectar · rueda/arrastra para bajar o subir';
+  hintEl.textContent = '⛏️ Explora los pasajes y haz clic en las vetas para recolectar';
 }
 function exitMine(){
   if(!inMine) return;
   inMine = false;
   activeMine = -1;
+  hemi.intensity = 0.9;
+  sun.intensity = 1.25;
+  scene.fog = new THREE.Fog(0x9fd0e8, 180, 780);
+  scene.background = new THREE.Color(0x9fd0e8);
 
   camera.position.copy(savedCam.pos);
   controls.target.copy(savedCam.target);
+  controls.maxPolarAngle = SURFACE_MAX_POLAR;
+  controls.minDistance = 8; controls.maxDistance = 620;
   controls.update();
 
   mineExitBtn.style.display = 'none';
   hintEl.textContent = '🖱️ Arrastra para orbitar · rueda para acercar/alejar · clic para recolectar o sembrar';
 }
 mineExitBtn.addEventListener('click', exitMine);
-
-// --- iluminación y niebla dinámicas según la profundidad de la cámara ---
-// en vez de un interruptor brusco al entrar/salir, todo cambia gradualmente
-// a medida que la cámara desciende bajo la superficie, para que se sienta
-// como un único mundo continuo (superficie -> subsuelo) en vez de dos escenas
-const skyColor = new THREE.Color(0x9fd0e8);
-const caveColor = new THREE.Color(0x0c0a08);
-const lerpColor = new THREE.Color();
-function updateDepthAtmosphere(){
-  const groundHere = baseHeight(camera.position.x, camera.position.z);
-  const depthT = THREE.MathUtils.clamp((groundHere - camera.position.y) / 45, 0, 1); // 0 = superficie, 1 = bajo tierra
-  hemi.intensity = THREE.MathUtils.lerp(0.9, 0.32, depthT);
-  sun.intensity = THREE.MathUtils.lerp(1.25, 0.22, depthT);
-  headlamp.intensity = THREE.MathUtils.lerp(0, 1.6, depthT);
-  lerpColor.copy(skyColor).lerp(caveColor, depthT);
-  scene.background = lerpColor.clone();
-  scene.fog.color.copy(lerpColor);
-  scene.fog.near = THREE.MathUtils.lerp(180, 40, depthT);
-  scene.fog.far = THREE.MathUtils.lerp(780, 340, depthT);
-}
 
 /* ============================================================
    CULTIVOS: parcelas que se pueden sembrar y cosechar
@@ -1215,15 +1144,11 @@ renderer.domElement.addEventListener('pointerdown', (ev)=>{
   pointerNDC.y = -(ev.clientY/window.innerHeight)*2+1;
   raycaster.setFromCamera(pointerNDC, camera);
 
-  // las vetas de mineral de todas las minas están disponibles siempre (las minas
-  // son parte permanente del subsuelo), así que se puede recolectar tanto entrando
-  // con clic en la entrada como bajando la cámara manualmente hasta el interior
-  const allOreMeshes = mineNetworks.flatMap(net => net.oreNodes.filter(n=>n.mesh.visible).map(n=>n.mesh));
-  const pool = [...resourceNodes.filter(n=>n.mesh.visible).map(n=>n.mesh),
+  const pool = inMine ? mineNetworks[activeMine].oreNodes.filter(n=>n.mesh.visible).map(n=>n.mesh) :
+    [...resourceNodes.filter(n=>n.mesh.visible).map(n=>n.mesh),
      ...animals.map(a=>a.group),
      ...cropPlots.map(p=>p.group),
-     ...mineEntrances.map(e=>e.mesh),
-     ...allOreMeshes];
+     ...mineEntrances.map(e=>e.mesh)];
 
   const hits = raycaster.intersectObjects(pool, true);
   if(!hits.length) return;
@@ -1267,7 +1192,7 @@ renderer.domElement.addEventListener('pointerdown', (ev)=>{
     }
     // si está creciendo, hay que esperar a que esté lista para cosechar
   } else if(target.userData.kind === 'ore'){
-    const node = mineNetworks[target.userData.mineIndex].oreNodes[target.userData.oreIndex];
+    const node = mineNetworks[activeMine].oreNodes[target.userData.oreIndex];
     inventory[node.type] += node.amount;
     updateInventoryHUD();
     spawnFloatText(`+${node.amount} ${node.type}`, ev.clientX, ev.clientY, '#9fe0ff');
@@ -1321,7 +1246,6 @@ function animate(){
 
   const t = clock.getElapsedTime();
   river.material.opacity = 0.82 + Math.sin(t*0.8)*0.05;
-  updateDepthAtmosphere();
 
   // deambular de los animales dentro de su radio de granja
   const now = performance.now();
