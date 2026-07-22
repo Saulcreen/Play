@@ -166,9 +166,10 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0,4,0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.07;
-controls.minDistance = 12;
+controls.minDistance = 6;
 controls.maxDistance = 620;
-controls.maxPolarAngle = Math.PI/2.08;
+controls.maxPolarAngle = Math.PI * 0.985; // casi libre: permite mirar desde abajo hacia arriba dentro de las minas
+controls.screenSpacePanning = true;
 controls.update();
 
 window.addEventListener('resize', ()=>{
@@ -831,7 +832,7 @@ function buildCorridor(length, width, height){
 
 function buildMineNetwork(mineIdx){
   const group = new THREE.Group();
-  group.visible = false;
+  group.visible = true;
   scene.add(group);
   group.add(new THREE.AmbientLight(0x2a3040, 0.9));
 
@@ -850,6 +851,7 @@ function buildMineNetwork(mineIdx){
     mesh.position.set(x, 0, z);
     mesh.userData.kind = 'ore';
     mesh.userData.oreIndex = oreNodes.length;
+    mesh.userData.mineIndex = mineIdx;
     group.add(mesh);
     oreNodes.push({ mesh, type, amount: type==='oro'?2:3 });
   }
@@ -991,42 +993,48 @@ function enterMine(mineIdx){
   savedCam.pos.copy(camera.position);
   savedCam.target.copy(controls.target);
 
-  surfaceObjects.forEach(o=> o.visible=false);
-  mineNetworks[mineIdx].group.visible = true;
+  // la mina ya está en su sitio bajo tierra (siempre visible): solo bajamos
+  // la cámara por el pozo, sin ocultar la superficie — así se siente un
+  // mundo continuo, como cavar hacia abajo en Minecraft
   const origin = mineNetworks[mineIdx].group.position;
-  hemi.intensity = 0.15;
-  sun.intensity = 0.1;
-  scene.fog = new THREE.Fog(0x0c0a08, 40, 340);
-  scene.background = new THREE.Color(0x0c0a08);
-
   camera.position.set(origin.x, origin.y+42, origin.z+62);
   controls.target.set(origin.x, origin.y+3, origin.z);
-  controls.minDistance = 8; controls.maxDistance = 260;
   controls.update();
 
   mineExitBtn.style.display = 'block';
-  hintEl.textContent = '⛏️ Explora los pasajes y haz clic en las vetas para recolectar';
+  hintEl.textContent = '⛏️ Explora los pasajes y haz clic en las vetas para recolectar · rueda/arrastra para bajar o subir';
 }
 function exitMine(){
   if(!inMine) return;
-  mineNetworks[activeMine].group.visible = false;
   inMine = false;
   activeMine = -1;
-  surfaceObjects.forEach(o=> o.visible=true);
-  hemi.intensity = 0.9;
-  sun.intensity = 1.25;
-  scene.fog = new THREE.Fog(0x9fd0e8, 180, 780);
-  scene.background = new THREE.Color(0x9fd0e8);
 
   camera.position.copy(savedCam.pos);
   controls.target.copy(savedCam.target);
-  controls.minDistance = 12; controls.maxDistance = 620;
   controls.update();
 
   mineExitBtn.style.display = 'none';
   hintEl.textContent = '🖱️ Arrastra para orbitar · rueda para acercar/alejar · clic para recolectar o sembrar';
 }
 mineExitBtn.addEventListener('click', exitMine);
+
+// --- iluminación y niebla dinámicas según la profundidad de la cámara ---
+// en vez de un interruptor brusco al entrar/salir, todo cambia gradualmente
+// a medida que la cámara desciende bajo la superficie, para que se sienta
+// como un único mundo continuo (superficie -> subsuelo) en vez de dos escenas
+const skyColor = new THREE.Color(0x9fd0e8);
+const caveColor = new THREE.Color(0x0c0a08);
+const lerpColor = new THREE.Color();
+function updateDepthAtmosphere(){
+  const depthT = THREE.MathUtils.clamp((0 - camera.position.y) / 45, 0, 1); // 0 = superficie, 1 = bajo tierra
+  hemi.intensity = THREE.MathUtils.lerp(0.9, 0.15, depthT);
+  sun.intensity = THREE.MathUtils.lerp(1.25, 0.1, depthT);
+  lerpColor.copy(skyColor).lerp(caveColor, depthT);
+  scene.background = lerpColor.clone();
+  scene.fog.color.copy(lerpColor);
+  scene.fog.near = THREE.MathUtils.lerp(180, 40, depthT);
+  scene.fog.far = THREE.MathUtils.lerp(780, 340, depthT);
+}
 
 /* ============================================================
    CULTIVOS: parcelas que se pueden sembrar y cosechar
@@ -1123,11 +1131,15 @@ renderer.domElement.addEventListener('pointerdown', (ev)=>{
   pointerNDC.y = -(ev.clientY/window.innerHeight)*2+1;
   raycaster.setFromCamera(pointerNDC, camera);
 
-  const pool = inMine ? mineNetworks[activeMine].oreNodes.filter(n=>n.mesh.visible).map(n=>n.mesh) :
-    [...resourceNodes.filter(n=>n.mesh.visible).map(n=>n.mesh),
+  // las vetas de mineral de todas las minas están disponibles siempre (las minas
+  // son parte permanente del subsuelo), así que se puede recolectar tanto entrando
+  // con clic en la entrada como bajando la cámara manualmente hasta el interior
+  const allOreMeshes = mineNetworks.flatMap(net => net.oreNodes.filter(n=>n.mesh.visible).map(n=>n.mesh));
+  const pool = [...resourceNodes.filter(n=>n.mesh.visible).map(n=>n.mesh),
      ...animals.map(a=>a.group),
      ...cropPlots.map(p=>p.group),
-     ...mineEntrances.map(e=>e.mesh)];
+     ...mineEntrances.map(e=>e.mesh),
+     ...allOreMeshes];
 
   const hits = raycaster.intersectObjects(pool, true);
   if(!hits.length) return;
@@ -1171,7 +1183,7 @@ renderer.domElement.addEventListener('pointerdown', (ev)=>{
     }
     // si está creciendo, hay que esperar a que esté lista para cosechar
   } else if(target.userData.kind === 'ore'){
-    const node = mineNetworks[activeMine].oreNodes[target.userData.oreIndex];
+    const node = mineNetworks[target.userData.mineIndex].oreNodes[target.userData.oreIndex];
     inventory[node.type] += node.amount;
     updateInventoryHUD();
     spawnFloatText(`+${node.amount} ${node.type}`, ev.clientX, ev.clientY, '#9fe0ff');
@@ -1225,6 +1237,7 @@ function animate(){
 
   const t = clock.getElapsedTime();
   river.material.opacity = 0.82 + Math.sin(t*0.8)*0.05;
+  updateDepthAtmosphere();
 
   // deambular de los animales dentro de su radio de granja
   const now = performance.now();
