@@ -784,7 +784,7 @@ function makeMineEntrance(){
   return g;
 }
 
-const MINE_SPOTS = [ {x:150,z:-40}, {x:-160,z:60}, {x:70,z:170} ];
+const MINE_SPOTS = [ {x:150,z:-40}, {x:-160,z:60}, {x:70,z:170}, {x:-60,z:-185}, {x:195,z:130} ];
 MINE_SPOTS.forEach((spot,idx)=>{
   const h = baseHeight(spot.x, spot.z);
   const mesh = makeMineEntrance();
@@ -885,7 +885,7 @@ function buildMineNetwork(mineIdx){
   }
 
   // pasajes principales que salen de la cámara central en todas direcciones
-  const numPassages = 7 + (mineIdx%2); // 7 u 8 pasajes principales por mina
+  const numPassages = 8 + (mineIdx%3); // 8, 9 o 10 pasajes principales por mina
   for(let p=0;p<numPassages;p++){
     const angle = (p/numPassages)*Math.PI*2 + mineIdx*0.4;
     const length = 36 + ((p+mineIdx)%4)*10; // pasajes largos: 36 a 66 unidades
@@ -956,7 +956,26 @@ function buildMineNetwork(mineIdx){
   return { group, oreNodes };
 }
 
-const mineNetworks = MINE_SPOTS.map((spot,idx) => buildMineNetwork(idx));
+const mineNetworks = MINE_SPOTS.map((spot,idx) => {
+  const net = buildMineNetwork(idx);
+  const entranceH = baseHeight(spot.x, spot.z);
+  const depth = 55 + (idx%3)*10; // cada mina cala más o menos profundo bajo el terreno
+  net.group.position.set(spot.x, entranceH - depth, spot.z);
+
+  // pozo vertical que conecta la cámara central con la superficie, para que
+  // se sienta como un mundo real bajo tierra y no una escena aparte
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.2,3.6,depth,14,1,true),
+    new THREE.MeshStandardMaterial({ color:0x3a342c, roughness:1, side:THREE.BackSide })
+  );
+  shaft.position.y = depth/2;
+  net.group.add(shaft);
+  const shaftLight = new THREE.PointLight(0xffd9a0, 0.8, depth+10);
+  shaftLight.position.set(0, depth-4, 0);
+  net.group.add(shaftLight);
+
+  return net;
+});
 
 /* --- transición superficie / mina --- */
 let inMine = false;
@@ -974,13 +993,14 @@ function enterMine(mineIdx){
 
   surfaceObjects.forEach(o=> o.visible=false);
   mineNetworks[mineIdx].group.visible = true;
+  const origin = mineNetworks[mineIdx].group.position;
   hemi.intensity = 0.15;
   sun.intensity = 0.1;
   scene.fog = new THREE.Fog(0x0c0a08, 40, 340);
   scene.background = new THREE.Color(0x0c0a08);
 
-  camera.position.set(0, 42, 62);
-  controls.target.set(0,3,0);
+  camera.position.set(origin.x, origin.y+42, origin.z+62);
+  controls.target.set(origin.x, origin.y+3, origin.z);
   controls.minDistance = 8; controls.maxDistance = 260;
   controls.update();
 
