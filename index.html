@@ -155,6 +155,12 @@ function addSurface(obj){ scene.add(obj); surfaceObjects.push(obj); return obj; 
 const camera = new THREE.PerspectiveCamera(48, window.innerWidth/window.innerHeight, 0.5, 2200);
 camera.position.set(25, 190, 320);
 
+// luz que acompaña a la cámara como una linterna — así se puede ver la tierra
+// y la roca del subsuelo aunque no se esté cerca de las antorchas de una mina
+const headlamp = new THREE.PointLight(0xffd9a0, 0, 75);
+camera.add(headlamp);
+scene.add(camera);
+
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
@@ -410,7 +416,7 @@ addSurface(buildUndergroundSkirt());
 
 // luz tenue permanente bajo tierra, para que la tierra y la roca del
 // subsuelo se puedan ver incluso lejos de las antorchas de las minas
-const undergroundAmbient = new THREE.AmbientLight(0x3a3226, 0.35);
+const undergroundAmbient = new THREE.AmbientLight(0x4a4030, 0.55);
 scene.add(undergroundAmbient);
 
 // nota: la plataforma central ya no se marca visualmente; el terreno queda
@@ -1104,8 +1110,9 @@ const lerpColor = new THREE.Color();
 function updateDepthAtmosphere(){
   const groundHere = baseHeight(camera.position.x, camera.position.z);
   const depthT = THREE.MathUtils.clamp((groundHere - camera.position.y) / 45, 0, 1); // 0 = superficie, 1 = bajo tierra
-  hemi.intensity = THREE.MathUtils.lerp(0.9, 0.15, depthT);
-  sun.intensity = THREE.MathUtils.lerp(1.25, 0.1, depthT);
+  hemi.intensity = THREE.MathUtils.lerp(0.9, 0.32, depthT);
+  sun.intensity = THREE.MathUtils.lerp(1.25, 0.22, depthT);
+  headlamp.intensity = THREE.MathUtils.lerp(0, 1.6, depthT);
   lerpColor.copy(skyColor).lerp(caveColor, depthT);
   scene.background = lerpColor.clone();
   scene.fog.color.copy(lerpColor);
