@@ -168,7 +168,12 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.07;
 controls.minDistance = 6;
 controls.maxDistance = 620;
-controls.maxPolarAngle = Math.PI * 0.985; // casi libre: permite mirar desde abajo hacia arriba dentro de las minas
+// en superficie el subsuelo está vacío salvo dentro de las minas, así que aquí
+// se limita el ángulo para no "caer" en el vacío fuera de ellas; dentro de una
+// mina (ver enterMine) se libera el ángulo para poder mirar en todas direcciones
+const SURFACE_MAX_POLAR = Math.PI/2.08;
+const MINE_MAX_POLAR = Math.PI * 0.985;
+controls.maxPolarAngle = SURFACE_MAX_POLAR;
 controls.screenSpacePanning = true;
 controls.update();
 
@@ -999,6 +1004,7 @@ function enterMine(mineIdx){
   const origin = mineNetworks[mineIdx].group.position;
   camera.position.set(origin.x, origin.y+42, origin.z+62);
   controls.target.set(origin.x, origin.y+3, origin.z);
+  controls.maxPolarAngle = MINE_MAX_POLAR;
   controls.update();
 
   mineExitBtn.style.display = 'block';
@@ -1011,6 +1017,7 @@ function exitMine(){
 
   camera.position.copy(savedCam.pos);
   controls.target.copy(savedCam.target);
+  controls.maxPolarAngle = SURFACE_MAX_POLAR;
   controls.update();
 
   mineExitBtn.style.display = 'none';
@@ -1234,6 +1241,12 @@ function animate(){
     c.position.x += dt*c.userData.speed;
     if(c.position.x > HALF+30) c.position.x = -HALF-30;
   });
+
+  // en superficie no dejamos que el objetivo baje del nivel del suelo (ahí no
+  // hay nada salvo dentro de las minas); dentro de una mina no se restringe
+  if(!inMine && controls.target.y < 0){
+    controls.target.y = 0;
+  }
 
   const t = clock.getElapsedTime();
   river.material.opacity = 0.82 + Math.sin(t*0.8)*0.05;
