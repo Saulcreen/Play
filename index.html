@@ -835,9 +835,9 @@ function buildMineNetwork(mineIdx){
   scene.add(group);
   group.add(new THREE.AmbientLight(0x2a3040, 0.9));
 
-  const hub = buildChamberFloorWalls(13, 6.2);
+  const hub = buildChamberFloorWalls(14, 6.4);
   group.add(hub);
-  const hubLight = new THREE.PointLight(0xffb877, 1.4, 40);
+  const hubLight = new THREE.PointLight(0xffb877, 1.5, 46);
   hubLight.position.set(0,5,0);
   group.add(hubLight);
 
@@ -853,68 +853,104 @@ function buildMineNetwork(mineIdx){
     group.add(mesh);
     oreNodes.push({ mesh, type, amount: type==='oro'?2:3 });
   }
+  function oreTypeFor(n){ return n%3===0 ? 'oro' : (n%3===1 ? 'cristal' : 'hierro'); }
 
-  const baseAngles = [0,60,120,180,240,300].map(d => (d+mineIdx*23)*Math.PI/180);
-  const numPassages = 5 + (mineIdx%2); // cada mina tiene 5 o 6 pasajes principales
+  // añade una alcoba lateral con veta propia, ramificada desde un punto de un pasaje
+  function addBranch(originX, originZ, baseAngle, seed){
+    const branchAngle = baseAngle + (Math.random()<0.5?1:-1)*(Math.PI/2.3);
+    const branchLen = 16 + Math.random()*14;
+    const branchCorridor = buildCorridor(branchLen, 4.4, 4.6);
+    branchCorridor.position.set(originX,0,originZ);
+    branchCorridor.rotation.y = -branchAngle;
+    group.add(branchCorridor);
+
+    const bTorch = new THREE.PointLight(0xffa04d, 0.7, 18);
+    bTorch.position.set(originX+Math.cos(branchAngle)*branchLen*0.5, 3, originZ+Math.sin(branchAngle)*branchLen*0.5);
+    group.add(bTorch);
+
+    const alcoveX = originX+Math.cos(branchAngle)*branchLen, alcoveZ = originZ+Math.sin(branchAngle)*branchLen;
+    const alcove = buildChamberFloorWalls(7.5, 5.6);
+    alcove.position.set(alcoveX,0,alcoveZ);
+    group.add(alcove);
+    const alcoveLight = new THREE.PointLight(0x8fd8ff, 0.9, 20);
+    alcoveLight.position.set(alcoveX,3.5,alcoveZ);
+    group.add(alcoveLight);
+
+    const alcoveType = oreTypeFor(seed);
+    for(let i=0;i<2;i++){
+      const ox = alcoveX + Math.cos(branchAngle+i*2.1)*(2.5+Math.random()*3);
+      const oz = alcoveZ + Math.sin(branchAngle+i*2.1)*(2.5+Math.random()*3);
+      addOre(alcoveType, ox, oz);
+    }
+  }
+
+  // pasajes principales que salen de la cámara central en todas direcciones
+  const numPassages = 7 + (mineIdx%2); // 7 u 8 pasajes principales por mina
   for(let p=0;p<numPassages;p++){
-    const angle = baseAngles[p % baseAngles.length];
-    const length = 28 + ((p+mineIdx)%3)*9;
+    const angle = (p/numPassages)*Math.PI*2 + mineIdx*0.4;
+    const length = 36 + ((p+mineIdx)%4)*10; // pasajes largos: 36 a 66 unidades
+
     const corridor = buildCorridor(length, 5.5, 5);
-    corridor.position.set(Math.cos(angle)*13, 0, Math.sin(angle)*13);
+    corridor.position.set(Math.cos(angle)*14, 0, Math.sin(angle)*14);
     corridor.rotation.y = -angle;
     group.add(corridor);
 
-    const torch = new THREE.PointLight(0xffa04d, 0.9, 22);
-    torch.position.set(Math.cos(angle)*(13+length*0.55), 3, Math.sin(angle)*(13+length*0.55));
+    const torch = new THREE.PointLight(0xffa04d, 0.9, 24);
+    torch.position.set(Math.cos(angle)*(14+length*0.5), 3, Math.sin(angle)*(14+length*0.5));
     group.add(torch);
 
-    const endX = Math.cos(angle)*(13+length);
-    const endZ = Math.sin(angle)*(13+length);
-    const chamber = buildChamberFloorWalls(10, 6);
+    const endX = Math.cos(angle)*(14+length);
+    const endZ = Math.sin(angle)*(14+length);
+    const chamber = buildChamberFloorWalls(10.5, 6);
     chamber.position.set(endX, 0, endZ);
     group.add(chamber);
-    const chamberLight = new THREE.PointLight(0x8fd8ff, 1.1, 28);
+    const chamberLight = new THREE.PointLight(0x8fd8ff, 1.1, 30);
     chamberLight.position.set(endX,4,endZ);
     group.add(chamberLight);
 
-    const oreType = p%3===0 ? 'oro' : (p%3===1 ? 'cristal' : 'hierro');
+    const oreType = oreTypeFor(p);
     for(let i=0;i<3;i++){
       const ox = endX + Math.cos(angle+i*1.7)*(3+Math.random()*4);
       const oz = endZ + Math.sin(angle+i*1.7)*(3+Math.random()*4);
       addOre(oreType, ox, oz);
     }
 
-    // pasaje secundario que se ramifica a media distancia del principal,
-    // llevando a una alcoba más pequeña con su propia veta
+    // cada pasaje principal tiene una ramificación lateral con su propia alcoba
+    const branchOriginDist = 14 + length*(0.4+Math.random()*0.25);
+    addBranch(Math.cos(angle)*branchOriginDist, Math.sin(angle)*branchOriginDist, angle, p+1);
+
+    // segundo anillo: el pasaje continúa más profundo hacia otra cámara aún más lejana
+    const angle2 = angle + (Math.random()-0.5)*0.9;
+    const length2 = 30 + Math.random()*30; // 30 a 60 unidades más
+    const corridor2 = buildCorridor(length2, 5, 4.6);
+    corridor2.position.set(endX, 0, endZ);
+    corridor2.rotation.y = -angle2;
+    group.add(corridor2);
+
+    const torch2 = new THREE.PointLight(0xffa04d, 0.85, 22);
+    torch2.position.set(endX+Math.cos(angle2)*length2*0.5, 3, endZ+Math.sin(angle2)*length2*0.5);
+    group.add(torch2);
+
+    const end2X = endX + Math.cos(angle2)*length2;
+    const end2Z = endZ + Math.sin(angle2)*length2;
+    const chamber2 = buildChamberFloorWalls(9, 5.6);
+    chamber2.position.set(end2X, 0, end2Z);
+    group.add(chamber2);
+    const chamber2Light = new THREE.PointLight(0x8fd8ff, 1.0, 26);
+    chamber2Light.position.set(end2X,3.6,end2Z);
+    group.add(chamber2Light);
+
+    const oreType2 = oreTypeFor(p+2);
+    for(let i=0;i<3;i++){
+      const ox = end2X + Math.cos(angle2+i*1.9)*(3+Math.random()*3.5);
+      const oz = end2Z + Math.sin(angle2+i*1.9)*(3+Math.random()*3.5);
+      addOre(oreType2, ox, oz);
+    }
+
+    // la mitad de los pasajes profundos también se ramifica una vez más
     if(p%2===0){
-      const branchFrac = 0.45 + Math.random()*0.2;
-      const originDist = 13 + length*branchFrac;
-      const originX = Math.cos(angle)*originDist, originZ = Math.sin(angle)*originDist;
-      const branchAngle = angle + (Math.random()<0.5?1:-1)*(Math.PI/2.3);
-      const branchLen = 15 + Math.random()*10;
-      const branchCorridor = buildCorridor(branchLen, 4.4, 4.6);
-      branchCorridor.position.set(originX,0,originZ);
-      branchCorridor.rotation.y = -branchAngle;
-      group.add(branchCorridor);
-
-      const bTorch = new THREE.PointLight(0xffa04d, 0.7, 16);
-      bTorch.position.set(originX+Math.cos(branchAngle)*branchLen*0.5, 3, originZ+Math.sin(branchAngle)*branchLen*0.5);
-      group.add(bTorch);
-
-      const alcoveX = originX+Math.cos(branchAngle)*branchLen, alcoveZ = originZ+Math.sin(branchAngle)*branchLen;
-      const alcove = buildChamberFloorWalls(7, 5.4);
-      alcove.position.set(alcoveX,0,alcoveZ);
-      group.add(alcove);
-      const alcoveLight = new THREE.PointLight(0x8fd8ff, 0.9, 20);
-      alcoveLight.position.set(alcoveX,3.5,alcoveZ);
-      group.add(alcoveLight);
-
-      const alcoveType = (p+1)%3===0 ? 'oro' : ((p+1)%3===1 ? 'cristal' : 'hierro');
-      for(let i=0;i<2;i++){
-        const ox = alcoveX + Math.cos(branchAngle+i*2.1)*(2.5+Math.random()*3);
-        const oz = alcoveZ + Math.sin(branchAngle+i*2.1)*(2.5+Math.random()*3);
-        addOre(alcoveType, ox, oz);
-      }
+      const branch2OriginDist = length2*(0.4+Math.random()*0.3);
+      addBranch(end2X + Math.cos(angle2)*0, end2Z, angle2, p+3);
     }
   }
   return { group, oreNodes };
@@ -940,12 +976,12 @@ function enterMine(mineIdx){
   mineNetworks[mineIdx].group.visible = true;
   hemi.intensity = 0.15;
   sun.intensity = 0.1;
-  scene.fog = new THREE.Fog(0x0c0a08, 40, 220);
+  scene.fog = new THREE.Fog(0x0c0a08, 40, 340);
   scene.background = new THREE.Color(0x0c0a08);
 
-  camera.position.set(0, 30, 46);
+  camera.position.set(0, 42, 62);
   controls.target.set(0,3,0);
-  controls.minDistance = 8; controls.maxDistance = 160;
+  controls.minDistance = 8; controls.maxDistance = 260;
   controls.update();
 
   mineExitBtn.style.display = 'block';
