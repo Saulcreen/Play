@@ -168,12 +168,9 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.07;
 controls.minDistance = 6;
 controls.maxDistance = 620;
-// en superficie el subsuelo está vacío salvo dentro de las minas, así que aquí
-// se limita el ángulo para no "caer" en el vacío fuera de ellas; dentro de una
-// mina (ver enterMine) se libera el ángulo para poder mirar en todas direcciones
-const SURFACE_MAX_POLAR = Math.PI/2.08;
-const MINE_MAX_POLAR = Math.PI * 0.985;
-controls.maxPolarAngle = SURFACE_MAX_POLAR;
+// ahora que hay tierra y roca sólidas bajo todo el mapa (no solo en las minas),
+// la cámara puede bajar y mirar libremente en cualquier dirección, en cualquier lugar
+controls.maxPolarAngle = Math.PI * 0.985;
 controls.screenSpacePanning = true;
 controls.update();
 
@@ -341,6 +338,80 @@ const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
 terrainMesh.receiveShadow = true;
 terrainMesh.castShadow = true;
 addSurface(terrainMesh);
+
+/* ============================================================
+   SUBSUELO SÓLIDO: como un "chunk" de Minecraft — tierra justo
+   debajo del césped y roca más profundo, cubriendo TODO el mapa
+   (no solo las minas), para que cavar en cualquier punto muestre
+   algo sólido en vez del vacío.
+   ============================================================ */
+
+const UNDERGROUND_BOTTOM = -100; // "lecho de roca" bien por debajo de las minas más profundas
+
+// techo subterráneo: repite exactamente el contorno del terreno, apenas más
+// abajo, visto solo desde debajo (la cara interior de la tierra, color tierra)
+const undergroundCeilingMat = new THREE.MeshStandardMaterial({ color:0x6b4a34, roughness:1, side:THREE.BackSide });
+const undergroundCeiling = new THREE.Mesh(terrainGeo, undergroundCeilingMat);
+undergroundCeiling.position.y = -1.2;
+addSurface(undergroundCeiling);
+
+// lecho de roca: piso sólido muy abajo, visible al mirar hacia abajo desde el subsuelo
+const bedrockGeo = new THREE.PlaneGeometry(TS, TS, 1, 1);
+bedrockGeo.rotateX(-Math.PI/2);
+const bedrockMat = new THREE.MeshStandardMaterial({ color:0x3a3630, roughness:1 });
+const bedrock = new THREE.Mesh(bedrockGeo, bedrockMat);
+bedrock.position.y = UNDERGROUND_BOTTOM;
+addSurface(bedrock);
+
+// paredes del borde del mapa, con degradado de tierra (arriba) a roca (abajo),
+// para cerrar el volumen del subsuelo y que se sienta un bloque sólido, no una caja vacía
+function buildUndergroundSkirt(){
+  const positions = [], colors = [], indices = [];
+  const dirt = new THREE.Color(0x6b4a34), stone = new THREE.Color(0x4a463f);
+  const bands = 6, steps = 140;
+  const perim = [];
+  for(let i=0;i<=steps;i++){
+    const t = i/steps;
+    const side = Math.floor(t*4);
+    const localT = (t*4) % 1;
+    let x,z;
+    if(side===0){ x = -HALF + localT*TS; z = -HALF; }
+    else if(side===1){ x = HALF; z = -HALF + localT*TS; }
+    else if(side===2){ x = HALF - localT*TS; z = HALF; }
+    else { x = -HALF; z = HALF - localT*TS; }
+    perim.push({x, z, h: baseHeight(x,z)});
+  }
+  for(let i=0;i<perim.length;i++){
+    const p = perim[i];
+    for(let b=0; b<=bands; b++){
+      const bt = b/bands;
+      const y = THREE.MathUtils.lerp(p.h - 1.2, UNDERGROUND_BOTTOM, bt);
+      positions.push(p.x, y, p.z);
+      const c = dirt.clone().lerp(stone, bt);
+      colors.push(c.r,c.g,c.b);
+    }
+  }
+  const rowLen = bands+1;
+  for(let i=0;i<perim.length-1;i++){
+    for(let b=0;b<bands;b++){
+      const a0=i*rowLen+b, a1=i*rowLen+b+1, b0=(i+1)*rowLen+b, b1=(i+1)*rowLen+b+1;
+      indices.push(a0,b0,a1, a1,b0,b1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:1, side:THREE.DoubleSide });
+  return new THREE.Mesh(geo, mat);
+}
+addSurface(buildUndergroundSkirt());
+
+// luz tenue permanente bajo tierra, para que la tierra y la roca del
+// subsuelo se puedan ver incluso lejos de las antorchas de las minas
+const undergroundAmbient = new THREE.AmbientLight(0x3a3226, 0.35);
+scene.add(undergroundAmbient);
 
 // nota: la plataforma central ya no se marca visualmente; el terreno queda
 // plano ahí (por dentro) pero con el mismo aspecto de pradera que el resto.
@@ -1004,7 +1075,6 @@ function enterMine(mineIdx){
   const origin = mineNetworks[mineIdx].group.position;
   camera.position.set(origin.x, origin.y+42, origin.z+62);
   controls.target.set(origin.x, origin.y+3, origin.z);
-  controls.maxPolarAngle = MINE_MAX_POLAR;
   controls.update();
 
   mineExitBtn.style.display = 'block';
@@ -1017,7 +1087,6 @@ function exitMine(){
 
   camera.position.copy(savedCam.pos);
   controls.target.copy(savedCam.target);
-  controls.maxPolarAngle = SURFACE_MAX_POLAR;
   controls.update();
 
   mineExitBtn.style.display = 'none';
@@ -1033,7 +1102,8 @@ const skyColor = new THREE.Color(0x9fd0e8);
 const caveColor = new THREE.Color(0x0c0a08);
 const lerpColor = new THREE.Color();
 function updateDepthAtmosphere(){
-  const depthT = THREE.MathUtils.clamp((0 - camera.position.y) / 45, 0, 1); // 0 = superficie, 1 = bajo tierra
+  const groundHere = baseHeight(camera.position.x, camera.position.z);
+  const depthT = THREE.MathUtils.clamp((groundHere - camera.position.y) / 45, 0, 1); // 0 = superficie, 1 = bajo tierra
   hemi.intensity = THREE.MathUtils.lerp(0.9, 0.15, depthT);
   sun.intensity = THREE.MathUtils.lerp(1.25, 0.1, depthT);
   lerpColor.copy(skyColor).lerp(caveColor, depthT);
@@ -1241,12 +1311,6 @@ function animate(){
     c.position.x += dt*c.userData.speed;
     if(c.position.x > HALF+30) c.position.x = -HALF-30;
   });
-
-  // en superficie no dejamos que el objetivo baje del nivel del suelo (ahí no
-  // hay nada salvo dentro de las minas); dentro de una mina no se restringe
-  if(!inMine && controls.target.y < 0){
-    controls.target.y = 0;
-  }
 
   const t = clock.getElapsedTime();
   river.material.opacity = 0.82 + Math.sin(t*0.8)*0.05;
