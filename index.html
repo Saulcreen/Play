@@ -166,11 +166,9 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0,4,0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.07;
-controls.minDistance = 8;
+controls.minDistance = 12;
 controls.maxDistance = 620;
-const SURFACE_MAX_POLAR = Math.PI/2.08;
-const MINE_MAX_POLAR = Math.PI*0.97; // dentro de la mina se libera para mirar en todas direcciones
-controls.maxPolarAngle = SURFACE_MAX_POLAR;
+controls.maxPolarAngle = Math.PI/2.08;
 controls.update();
 
 window.addEventListener('resize', ()=>{
@@ -783,25 +781,6 @@ function makeMineEntrance(){
   mouth.position.set(0,1.55,0.55);
   g.add(frameL,frameR,lintel,mouth);
   g.traverse(o=>{ if(o.isMesh){o.castShadow=true; o.receiveShadow=true;} });
-
-  // luz cálida a la entrada, para que se note desde lejos y no se pierda en las sombras
-  const glow = new THREE.PointLight(0xffb877, 1.1, 26);
-  glow.position.set(0, 2.4, 1.6);
-  g.add(glow);
-
-  // letrero flotante con pico, para que se vea claro que ahí se puede entrar a minar
-  const canvas = document.createElement('canvas');
-  canvas.width = 128; canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-  ctx.font = '84px sans-serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('⛏️', 64, 68);
-  const labelTex = new THREE.CanvasTexture(canvas);
-  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map:labelTex, transparent:true, depthTest:false }));
-  label.scale.set(3.2,3.2,1);
-  label.position.set(0, 5.6, 0);
-  g.add(label);
-
   return g;
 }
 
@@ -852,7 +831,7 @@ function buildCorridor(length, width, height){
 
 function buildMineNetwork(mineIdx){
   const group = new THREE.Group();
-  group.visible = true;
+  group.visible = false;
   scene.add(group);
   group.add(new THREE.AmbientLight(0x2a3040, 0.9));
 
@@ -1012,17 +991,16 @@ function enterMine(mineIdx){
   savedCam.pos.copy(camera.position);
   savedCam.target.copy(controls.target);
 
-  // la mina ya está en su sitio, bajo el pasto — solo bajamos la cámara por
-  // el pozo hacia el subsuelo, sin ocultar la superficie
+  surfaceObjects.forEach(o=> o.visible=false);
+  mineNetworks[mineIdx].group.visible = true;
   const origin = mineNetworks[mineIdx].group.position;
-  hemi.intensity = 0.4;
-  sun.intensity = 0.35;
-  scene.fog = new THREE.Fog(0x14100c, 45, 300);
-  scene.background = new THREE.Color(0x14100c);
+  hemi.intensity = 0.15;
+  sun.intensity = 0.1;
+  scene.fog = new THREE.Fog(0x0c0a08, 40, 340);
+  scene.background = new THREE.Color(0x0c0a08);
 
   camera.position.set(origin.x, origin.y+42, origin.z+62);
   controls.target.set(origin.x, origin.y+3, origin.z);
-  controls.maxPolarAngle = MINE_MAX_POLAR;
   controls.minDistance = 8; controls.maxDistance = 260;
   controls.update();
 
@@ -1031,8 +1009,10 @@ function enterMine(mineIdx){
 }
 function exitMine(){
   if(!inMine) return;
+  mineNetworks[activeMine].group.visible = false;
   inMine = false;
   activeMine = -1;
+  surfaceObjects.forEach(o=> o.visible=true);
   hemi.intensity = 0.9;
   sun.intensity = 1.25;
   scene.fog = new THREE.Fog(0x9fd0e8, 180, 780);
@@ -1040,8 +1020,7 @@ function exitMine(){
 
   camera.position.copy(savedCam.pos);
   controls.target.copy(savedCam.target);
-  controls.maxPolarAngle = SURFACE_MAX_POLAR;
-  controls.minDistance = 8; controls.maxDistance = 620;
+  controls.minDistance = 12; controls.maxDistance = 620;
   controls.update();
 
   mineExitBtn.style.display = 'none';
